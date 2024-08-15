@@ -20,7 +20,6 @@ from scipy.stats import binned_statistic_2d
 
 ### common functions
 
-
 def rotate_galaxy(particles, orientation, spin_aperture):  # [kpc]
     if orientation == "original":
         return particles
@@ -410,6 +409,8 @@ def data_preprocess_api(
         if selection_type == "total mass":
             mass = mass_tot
 
+        if subhalo['subhaloflag'] != 1: 
+            continue
         if mass > max_mass:
             continue
         if mass < min_mass or mass < resolution_limit:
@@ -744,6 +745,8 @@ def data_preprocess_local(
                 np.log10(mass),
             )
 
+        if subhalo['SubhaloFlag'] != 1: 
+            continue
         if mass < resolution_limit:
             continue
         if mass < min_mass:
