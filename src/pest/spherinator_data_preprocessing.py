@@ -11,10 +11,8 @@ import requests
 import illustris_python as il
 import numpy as np
 import matplotlib.pyplot as plt
-import torch
 from PIL import Image, ImageFilter
 from pathlib import Path
-import scipy
 from scipy.stats import binned_statistic_2d
 
 
@@ -236,28 +234,28 @@ def get(path, params=None):
 
 ### Main routine to read data using API
 def data_preprocess_api(
-    sim="TNG100-1",
-    snapshot=99,
-    objects="centrals",
-    selection_type="stellar mass",
-    min_mass=1e8,
-    max_mass=np.inf,
-    component="stars",
-    output_type="2D projection",
-    field="Masses",
-    operation="sum",
-    fov=None,  # [kpc]
-    image_depth=4,  # [particles]
-    image_size=128,
-    smoothing=1.0,  # [kpc]
-    channels=1,
-    image_scale="log",
-    orientation="face-on",
-    spin_aperture=30.0,  # [kpc]
-    catalog_fields=["SubhaloStarMetallicity", "SubhaloSFR"],
-    resolution_limit=1e9,  # [Msun]
-    output_path="./images/",
-    debug=False,
+    sim: str = "TNG100-1",
+    snapshot: int = 99,
+    objects: str = "centrals",
+    selection_type: str = "stellar mass",
+    min_mass: float = 1e8,
+    max_mass: float = np.inf,
+    component: str = "stars",
+    output_type: str = "2D projection",
+    field: str = "Masses",
+    operation: str = "sum",
+    fov: float = None,  # [kpc]
+    image_depth: int = 4,  # [particles]
+    image_size: int = 128,
+    smoothing: float = 1.0,  # [kpc]
+    channels: int = 1,
+    image_scale: str = "log",
+    orientation: str = "face-on",
+    spin_aperture: float = 30.0,  # [kpc]
+    catalog_fields: list = ["SubhaloStarMetallicity", "SubhaloSFR"],
+    resolution_limit: float = 1e9,  # [Msun]
+    output_path: str = "./images/",
+    debug: bool = False,
 ):
     """Preprocess data using IllustrisTNG API.
 
