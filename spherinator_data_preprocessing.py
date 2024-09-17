@@ -81,7 +81,7 @@ def create_image(
 ):
 
     if type(fov) == float:
-        scale = fov
+        max_rad = fov/2.
     else:
         if fov == "scaled":
             rad = np.linalg.norm(particles["Coordinates"], axis=1)
@@ -162,7 +162,7 @@ def create_image(
         plt.ylabel("Frequency")
 
     image = Image.fromarray((np.clip(image, 0, 1) * 255).astype(np.uint8), mode="L")
-    if smoothing > 0:
+    if smoothing != 'None':
         image = image.filter(ImageFilter.GaussianBlur(radius=smoothing / pixelScale))
 
     # filepath = output_path / Path(sim, str(snapshot))
@@ -249,7 +249,7 @@ def data_preprocess_api(
     fov=None,  # [kpc]
     image_depth=4,  # [particles]
     image_size=128,
-    smoothing=1.0,  # [kpc]
+    smoothing='None',  # [kpc]
     channels=1,
     image_scale="log",
     orientation="face-on",
@@ -275,8 +275,8 @@ def data_preprocess_api(
         fov (float): Field of view in kpc. Default is None.
         image_depth (int): Image depth in particles. Default is 4.
         image_size (int): Image size. Default is 128.
-        smoothing (float): Smoothing factor in kpc. Default is 1.0.
-        channels (int): Number of channels. Default is 1.
+        smoothing (float): Smoothing factor in kpc. Default is 'None'.
+        channels (int): Number of image channels. Default is 1.
         image_scale (str): Image scale type. Default is "log".
         orientation (str): Orientation of the image. Default is "face-on".
         spin_aperture (float): Spin aperture in kpc. Default is 30.0.
@@ -585,7 +585,7 @@ def data_preprocess_local(
     fov=None,  # [kpc]
     image_depth=1,  # [particles]
     image_size=128,
-    smoothing=1.0,  # [kpc]
+    smoothing='None',  # [kpc]
     channels=1,
     image_scale="log",
     orientation="face-on",
