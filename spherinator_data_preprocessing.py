@@ -363,7 +363,7 @@ def data_preprocess_api(
     url = "http://www.tng-project.org/api/" + sim + "/"
 
     # get header info
-    sim_info = get(url, key)
+    sim_info = get(url, api_key)
     # print(sim_info)
     box_size = sim_info["boxsize"] / sim_info["hubble"]
     print(f"Box size:", box_size / 1e3, " Mpc")
@@ -377,7 +377,7 @@ def data_preprocess_api(
     print(f"\nSorting halos by {sorting}")
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/",
-        key,
+        api_key,
         {"limit": 10000, "order_by": sorting},
     )
     print(f"Number of subhalos in catalog: {subhalos['count']}\n")
@@ -396,7 +396,7 @@ def data_preprocess_api(
         print(search_query)
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/" + search_query,
-        key,
+        api_key,
         {"order_by": sorting},
     )
     print(f"\nNumber of subhalos in mass range: {subhalos['count']}\n")
@@ -416,16 +416,16 @@ def data_preprocess_api(
         if debug:
             print(subhalos["results"][i]["url"])
 
-        subhalo = get(subhalos["results"][i]["url"], key)
+        subhalo = get(subhalos["results"][i]["url"], api_key)
         mass_stars = subhalo["mass_stars"] * mass_units_msun
         mass_tot = subhalo["mass"] * mass_units_msun
 
         # sub_details = get(subhalo['meta']['url']+'info.json')
-        sub_details = get(subhalo["meta"]["info"], key)
+        sub_details = get(subhalo["meta"]["info"], api_key)
         v0 = sub_details[catalog_fields[0]]  # raw simulation units
         v1 = sub_details[catalog_fields[1]]
 
-        group = get(subhalo["related"]["parent_halo"] + "info.json", key)
+        group = get(subhalo["related"]["parent_halo"] + "info.json", api_key)
         mass_halo = group["Group_M_Crit200"] * mass_units_msun
 
         if selection_type == "stellar mass":
@@ -456,7 +456,7 @@ def data_preprocess_api(
         print(f" Mstars={m_stars[-1]:.2e}, Rhalf={r_half[-1]:.2f}, Mtot={mass_tot:.2e}")
 
         # load galaxy particles
-        cutout = get(subhalo["cutouts"]["subhalo"], key, {component: comp_list})
+        cutout = get(subhalo["cutouts"]["subhalo"], api_key, {component: comp_list})
 
         if debug:
             print(f" Npart:{subhalo['len_stars']}")
