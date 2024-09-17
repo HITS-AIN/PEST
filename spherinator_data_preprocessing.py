@@ -73,6 +73,7 @@ def create_image(
     image_scale,
     image_size,
     smoothing,
+    channels,
     subid,
     component,
     orientation,
@@ -113,45 +114,54 @@ def create_image(
 
     img_x = particles["Coordinates"][:, 0]
     img_y = particles["Coordinates"][:, indy]
-    if field == "HI mass":
-        quantity = particles["Masses"] * particles["NeutralHydrogenAbundance"]
-    else:
-        quantity = particles[field]
-
+    #if field == "HI mass":
+    #    quantity = particles["Masses"] * particles["NeutralHydrogenAbundance"]
+    
     # define image resolution and physical extent
     nPixels = [image_size, image_size]
     minMax = [-max_rad, max_rad]  # [kpc], relative to the galaxy center
     pixelScale = 2 * max_rad / float(image_size)
-
-    # add the mass of particles on a grid in the image plane
-    grid_quantity, _, _, _ = binned_statistic_2d(
-        img_x,
-        img_y,
-        quantity,
-        statistic=operation,
-        bins=nPixels,
-        range=[minMax, minMax],
-    )
+    
+    #part_mass = np.mean(particles["Masses"])
     # count the number of particles on the grid
     grid_npart, _, _, _ = binned_statistic_2d(
-        img_x, img_y, quantity, statistic="count", bins=nPixels, range=[minMax, minMax]
+                            img_x, 
+                            img_y, 
+                            particles[field[0]], 
+                            statistic="count", 
+                            bins=nPixels, 
+                            range=[minMax, minMax]
     )
+    
+    # add the mass of particles on a grid in the image plane
+    grid_quants = []
+    for i in range(channels):
+        gq, _, _, _ = binned_statistic_2d(
+                        img_x,
+                        img_y,
+                        particles[field[i]],
+                        statistic=operation[i],
+                        bins=nPixels,
+                        range=[minMax, minMax],
+        )
+        # set max image depth?
+        #gq = np.clip(gq, image_depth*part_mass, np.inf)
+        #gq[grid_npart<image_depth] = image_depth
+        # scale and normalize
+        if image_scale[i] == "log":
+            gq = np.log10(gq)
+        if np.max(gq) > np.min(gq):
+            gq = (gq - np.min(gq)) / (np.max(gq) - np.min(gq))
+        # collect channel arrays
+        grid_quants.append(gq)
+    #grid_quant1, grid_quant2, grid_quant3 = grid_quants
+        
+    # Stack the arrays along the last dimension to form an RGB image
+    image = np.stack((grid_quants), axis=-1)
 
-    # make image and save
-    part_mass = np.mean(particles["Masses"])
-    print(f" mean particle mass = {part_mass:.2e} Ms")
-    image = grid_quantity
-    image = np.clip(image, image_depth * part_mass, np.inf)
     print(
         f" grid values: min={np.min(image.flatten()):.2e} Ms, max={np.max(image.flatten()):.2e} Ms"
     )
-    if image_scale == "log":
-        image = np.log10(image)
-
-    if np.max(image) > np.min(image):
-        image = (image - np.min(image)) / (np.max(image) - np.min(image))
-    else:
-        image = np.zeros_like(image)
 
     # Plot histogram
     if debug:
@@ -161,9 +171,10 @@ def create_image(
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
-    image = Image.fromarray((np.clip(image, 0, 1) * 255).astype(np.uint8), mode="L")
+    #image = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8), mode="L")  # grayscale
+    image = Image.fromarray((np.clip(image,0,1)*255).astype(np.uint8))
     if smoothing != 'None':
-        image = image.filter(ImageFilter.GaussianBlur(radius=smoothing / pixelScale))
+        image = image.filter(ImageFilter.GaussianBlur(radius=smoothing/pixelScale))
 
     # filepath = output_path / Path(sim, str(snapshot))
     filepath = Path(output_path)
@@ -480,6 +491,7 @@ def data_preprocess_api(
                 image_scale,
                 image_size,
                 smoothing,
+                channels,
                 subid[-1],
                 component,
                 orientation,
@@ -797,6 +809,7 @@ def data_preprocess_local(
                 image_scale,
                 image_size,
                 smoothing,
+                channels,
                 subid,
                 component,
                 orientation,
@@ -806,11 +819,11 @@ def data_preprocess_local(
 
         if output_type == "point cloud":
             print(" creating point cloud...")
-            pointcloud = [
-                particles["Coordinates"],
-                particles["Velocities"],
-                particles[field],
-            ]
+            pointcloud = {
+                "Coordinates": particles["Coordinates"],
+                "Velocities": particles["Velocities"],
+                field: particles[field],
+            }
 
         sub_id.append(subid)
         group_id.append(gid)
