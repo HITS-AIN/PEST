@@ -156,18 +156,17 @@ def create_image(
         grid_quants.append(gq)
     #grid_quant1, grid_quant2, grid_quant3 = grid_quants
         
-    # Stack the arrays along the last dimension to form an RGB image
+    # Stack the arrays along the last dimension to form an single or multi-channel image
     image = np.stack((grid_quants), axis=-1)
-
     print(
-        f" grid values: min={np.min(image.flatten()):.2e} Ms, max={np.max(image.flatten()):.2e} Ms"
+        f" pixel value range: {np.min(image.flatten()):.2e} - {np.max(image.flatten()):.2e}"
     )
 
     # Plot histogram
     if debug:
         plt.figure()
         plt.hist(image.flatten(), bins=100, color="gray", alpha=0.7)
-        plt.title("Histogram of Grid Values")
+        plt.title("Histogram of pixel values")
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
