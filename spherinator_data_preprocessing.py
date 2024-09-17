@@ -127,7 +127,7 @@ def create_image(
     grid_npart, _, _, _ = binned_statistic_2d(
                             img_x, 
                             img_y, 
-                            particles[field[0]], 
+                            particles[channels[0]], 
                             statistic="count", 
                             bins=nPixels, 
                             range=[minMax, minMax]
@@ -135,11 +135,11 @@ def create_image(
     
     # add the mass of particles on a grid in the image plane
     grid_quants = []
-    for i in range(channels):
+    for i in range(len(channels)):
         gq, _, _, _ = binned_statistic_2d(
                         img_x,
                         img_y,
-                        particles[field[i]],
+                        particles[channels[i]],
                         statistic=operation[i],
                         bins=nPixels,
                         range=[minMax, minMax],
@@ -170,8 +170,19 @@ def create_image(
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
-    #image = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8), mode="L")  # grayscale
-    image = Image.fromarray((np.clip(image,0,1)*255).astype(np.uint8))
+    print(f"Image shape: {image.shape}, {image.dtype}")
+    if len(channels) == 1:  # Grayscale
+        image = np.squeeze(image)
+        mode = "L"
+    elif len(channels) == 3:  # Color images (e.g., RGB)
+        mode = "RGB"
+    else:
+        raise ValueError("Unexpected image shape: {}".format(image.shape))
+    
+    #test = (np.clip(image, 0, 1)*255).astype(np.uint8)
+    #print(test.shape, test.dtype)
+
+    image = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8), mode=mode)  
     if smoothing != 'None':
         image = image.filter(ImageFilter.GaussianBlur(radius=smoothing/pixelScale))
 
@@ -224,9 +235,9 @@ def rotate_z(ar, angle):
 
 
 ### API helper function
-def get(path, params=None):
+def get(path, key, params=None):
     # make HTTP GET request to path
-    headers = {"api-key": "5a21bb189d49e865c26249c8aad50c2f"}
+    headers = {"api-key": key}
     r = requests.get(path, params=params, headers=headers)
 
     # raise exception if response code is not HTTP SUCCESS (200)
@@ -246,6 +257,7 @@ def get(path, params=None):
 
 ### Main routine to read data using API
 def data_preprocess_api(
+    api_key,
     sim="TNG100-1",
     snapshot=99,
     objects="centrals",
@@ -260,7 +272,7 @@ def data_preprocess_api(
     image_depth=4,  # [particles]
     image_size=128,
     smoothing='None',  # [kpc]
-    channels=1,
+    channels=['Masses'],
     image_scale="log",
     orientation="face-on",
     spin_aperture=30.0,  # [kpc]
@@ -272,6 +284,7 @@ def data_preprocess_api(
     """Preprocess data using IllustrisTNG API.
 
     Args:
+        api_key (str): API key..
         sim (str): Name of the simulation. Default is "TNG100-1".
         snapshot (int): Snapshot number. Default is 99.
         objects (str): Type of objects to process. Default is "centrals".
@@ -301,6 +314,7 @@ def data_preprocess_api(
 
     print(
         f"Parameters:\n"
+        f" api_key: {api_key}\n"
         f" simulation: {sim}\n"
         f" snapshot: {snapshot}\n"
         f" objects: {objects}\n"
@@ -349,7 +363,7 @@ def data_preprocess_api(
     url = "http://www.tng-project.org/api/" + sim + "/"
 
     # get header info
-    sim_info = get(url)
+    sim_info = get(url, key)
     # print(sim_info)
     box_size = sim_info["boxsize"] / sim_info["hubble"]
     print(f"Box size:", box_size / 1e3, " Mpc")
@@ -363,6 +377,7 @@ def data_preprocess_api(
     print(f"\nSorting halos by {sorting}")
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/",
+        key,
         {"limit": 10000, "order_by": sorting},
     )
     print(f"Number of subhalos in catalog: {subhalos['count']}\n")
@@ -381,6 +396,7 @@ def data_preprocess_api(
         print(search_query)
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/" + search_query,
+        key,
         {"order_by": sorting},
     )
     print(f"\nNumber of subhalos in mass range: {subhalos['count']}\n")
@@ -400,16 +416,16 @@ def data_preprocess_api(
         if debug:
             print(subhalos["results"][i]["url"])
 
-        subhalo = get(subhalos["results"][i]["url"])
+        subhalo = get(subhalos["results"][i]["url"], key)
         mass_stars = subhalo["mass_stars"] * mass_units_msun
         mass_tot = subhalo["mass"] * mass_units_msun
 
         # sub_details = get(subhalo['meta']['url']+'info.json')
-        sub_details = get(subhalo["meta"]["info"])
+        sub_details = get(subhalo["meta"]["info"], key)
         v0 = sub_details[catalog_fields[0]]  # raw simulation units
         v1 = sub_details[catalog_fields[1]]
 
-        group = get(subhalo["related"]["parent_halo"] + "info.json")
+        group = get(subhalo["related"]["parent_halo"] + "info.json", key)
         mass_halo = group["Group_M_Crit200"] * mass_units_msun
 
         if selection_type == "stellar mass":
@@ -440,7 +456,7 @@ def data_preprocess_api(
         print(f" Mstars={m_stars[-1]:.2e}, Rhalf={r_half[-1]:.2f}, Mtot={mass_tot:.2e}")
 
         # load galaxy particles
-        cutout = get(subhalo["cutouts"]["subhalo"], {component: comp_list})
+        cutout = get(subhalo["cutouts"]["subhalo"], key, {component: comp_list})
 
         if debug:
             print(f" Npart:{subhalo['len_stars']}")
