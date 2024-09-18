@@ -122,7 +122,6 @@ def create_image(
     minMax = [-max_rad, max_rad]  # [kpc], relative to the galaxy center
     pixelScale = 2 * max_rad / float(image_size)
     
-    #part_mass = np.mean(particles["Masses"])
     # count the number of particles on the grid
     grid_npart, _, _, _ = binned_statistic_2d(
                             img_x, 
@@ -136,6 +135,7 @@ def create_image(
     # add the mass of particles on a grid in the image plane
     grid_quants = []
     for i in range(len(channels)):
+        print(channels[i], operation[i])
         gq, _, _, _ = binned_statistic_2d(
                         img_x,
                         img_y,
@@ -144,44 +144,48 @@ def create_image(
                         bins=nPixels,
                         range=[minMax, minMax],
         )
-        # set max image depth?
-        #gq = np.clip(gq, image_depth*part_mass, np.inf)
-        #gq[grid_npart<image_depth] = image_depth
+        # set max image depth (for density maps)
+        if channels[i]=="Masses":
+            part_mass = np.mean(particles['Masses'])
+            gq = np.clip(gq, image_depth*part_mass, np.inf)
+            #gq[grid_npart<image_depth] = image_depth*part_mass
+            print(f" pixel value range: {np.min(gq.flatten()):.2e} - {np.max(gq.flatten()):.2e}")
+            print(f" particles in FOV: {np.sum(grid_npart):.0f}")
         # scale and normalize
         if image_scale[i] == "log":
             gq = np.log10(gq)
-        if np.max(gq) > np.min(gq):
-            gq = (gq - np.min(gq)) / (np.max(gq) - np.min(gq))
+        if debug:
+            plt.figure(); plt.imshow(gq, cmap="viridis")
+        if np.nanmax(gq) > np.nanmin(gq):
+            gq = (gq - np.nanmin(gq)) / (np.nanmax(gq) - np.nanmin(gq))
+        # remove NaNs
+        gq[gq==np.nan] = 0
+        if debug:
+            plt.figure(); plt.imshow(gq, cmap="viridis")
         # collect channel arrays
         grid_quants.append(gq)
-    #grid_quant1, grid_quant2, grid_quant3 = grid_quants
+    
         
-    # Stack the arrays along the last dimension to form an single or multi-channel image
+    # Stack the arrays along the last dimension to produce a single or multi-channel image
     image = np.stack((grid_quants), axis=-1)
-    print(
-        f" pixel value range: {np.min(image.flatten()):.2e} - {np.max(image.flatten()):.2e}"
-    )
-
-    # Plot histogram
     if debug:
+        print(f" image shape: {image.shape}")
+        print(f" normalized pixel value range: {np.min(image.flatten()):.2e} - {np.max(image.flatten()):.2e}")
         plt.figure()
         plt.hist(image.flatten(), bins=100, color="gray", alpha=0.7)
         plt.title("Histogram of pixel values")
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
-
-    print(f"Image shape: {image.shape}, {image.dtype}")
     if len(channels) == 1:  # Grayscale
         image = np.squeeze(image)
         mode = "L"
-    elif len(channels) == 3:  # Color images (e.g., RGB)
+    elif len(channels) == 3:  
         mode = "RGB"
+    elif len(channels) == 4:  
+        mode = "ARGB"
     else:
         raise ValueError("Unexpected image shape: {}".format(image.shape))
     
-    #test = (np.clip(image, 0, 1)*255).astype(np.uint8)
-    #print(test.shape, test.dtype)
-
     image = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8), mode=mode)  
     if smoothing != 'None':
         image = image.filter(ImageFilter.GaussianBlur(radius=smoothing/pixelScale))
@@ -299,11 +303,11 @@ def data_preprocess_api(
         image_depth (int): Image depth in particles. Default is 4.
         image_size (int): Image size. Default is 128.
         smoothing (float): Smoothing factor in kpc. Default is 'None'.
-        channels (int): Number of image channels. Default is 1.
+        channels (int): List of image channels. Default is ["Masses"].
         image_scale (str): Image scale type. Default is "log".
         orientation (str): Orientation of the image. Default is "face-on".
-        spin_aperture (float): Spin aperture in kpc. Default is 30.0.
-        catalog_fields (list): List of catalog fields. Default is ["SubhaloStarMetallicity", "SubhaloSFR"].
+        spin_aperture (float): Aperture for spin calculation in kpc. Default is 30.0.
+        catalog_fields (list): List of fields to output in catalog. Default is ["SubhaloStarMetallicity", "SubhaloSFR"].
         resolution_limit (float): Resolution limit in Msun. Default is 1e9.
         output_path (str): Output path for images. Default is "./images/".
         debug (bool): Debug mode flag. Default is False.
