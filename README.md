@@ -5,6 +5,6 @@ to preprocess simulation data and generate training data for Spherinator, includ
 It is currently designed to work with IllustrisTNG data, either through the web-based API or locally using downloaded snapshots. 
 
 <p align="center">
-  <img src="logo.png" width="150" height="150">
+  <img src="logo.png" width="100" height="100">
 </p>
 
