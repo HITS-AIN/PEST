@@ -1,7 +1,7 @@
 # Preprocessing Engine for Spherinator Training (PEST) 
 
 PEST is a set of Python routines
-to preprocess simulation data and generate training data for Spherinator, including arbitrary single- and multi-channel images, maps, and point clouds. 
+to preprocess simulation data and generate training data for Spherinator, including arbitrary single- and multi-channel images, 3D PPP and PPV cubes, and point clouds. 
 It is currently designed to work with IllustrisTNG data, either through the web-based API or locally using downloaded snapshots. 
 
 <p align="center">
