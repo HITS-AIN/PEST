@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# First version of Spherinator data preprocessing routine to produce
-# point clouds or 2D maps of arbitrary quantities
-
+""" 
+First version of Spherinator data preprocessing routine to produce
+images, 2D maps, datacubes, or point clouds of arbitrary quantities
+"""
 
 import os
 import h5py
@@ -21,6 +22,32 @@ from skimage.io import imsave
 
 
 ### common functions
+
+def map_bands_to_values(bands):
+    band_mapping = {'U':0, 'B':1, 'V':2, 'K':3, 'g':4, 'r':5, 'i':6, 'z':7}
+    return [band_mapping[band] for band in bands]
+
+def sdss_to_rgb(g, r, i, min=0, f='asinh', alpha=0.02, Q=8.0):
+    I = (g + r + i)/3.
+    if f=='asinh':
+        B = g * np.arcsinh(alpha * Q * (I - min)) / Q
+        G = r * np.arcsinh(alpha * Q * (I - min)) / Q
+        R = i * np.arcsinh(alpha * Q * (I - min)) / Q
+    elif f=='log':
+        B = np.log10(g)
+        G = np.log10(r)
+        R = np.log10(i)
+    # remove nans
+    B = np.nan_to_num(B)
+    G = np.nan_to_num(G)
+    R = np.nan_to_num(R)
+    # normalize to 0-1
+    all_channels = np.stack([R, G, B])
+    norm = np.max(all_channels)
+    R /= norm; G /= norm; B /= norm
+    
+    return [R, G, B]
+
 
 def rotate_galaxy(particles, orientation, spin_aperture):  # [kpc]
     if orientation == "original":
@@ -66,10 +93,11 @@ def rotate_galaxy(particles, orientation, spin_aperture):  # [kpc]
     return particles
 
 
-def create_image(
+def create_2Dmap(
     particles,
     operations,
     fov,
+    fov_unit,
     image_depth,
     image_scale,
     image_size,
@@ -83,28 +111,28 @@ def create_image(
     debug,
 ):
 
-    if type(fov) == float:
-        max_rad = fov/2.
-    else:
-        if fov == "scaled":
-            rad = np.linalg.norm(particles["Coordinates"], axis=1)
-            if debug:
-                print(
-                    np.min(particles["Coordinates"][:, 0]),
-                    np.max(particles["Coordinates"][:, 0]),
-                )
-                print(
-                    np.min(particles["Coordinates"][:, 1]),
-                    np.max(particles["Coordinates"][:, 1]),
-                )
-                print(
-                    np.min(particles["Coordinates"][:, 2]),
-                    np.max(particles["Coordinates"][:, 2]),
-                )
-            max_rad = 1.2 * np.percentile(rad, 99)
+    if fov_unit == 'kpc':
+        max_rad = fov / 2.
+    
+    elif fov_unit == "r50":
+        rad = np.linalg.norm(particles["Coordinates"], axis=1)
+        if debug:
             print(
-                f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
+                np.min(particles["Coordinates"][:, 0]),
+                np.max(particles["Coordinates"][:, 0]),
             )
+            print(
+                np.min(particles["Coordinates"][:, 1]),
+                np.max(particles["Coordinates"][:, 1]),
+            )
+            print(
+                np.min(particles["Coordinates"][:, 2]),
+                np.max(particles["Coordinates"][:, 2]),
+            )
+        max_rad = (fov / 2.) * np.percentile(rad, 50)
+        print(
+            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
+        )
 
     print(f" FOV: {2*max_rad:.1f} kpc")
 
@@ -164,14 +192,15 @@ def create_image(
             gq = (gq - np.nanmin(gq)) / (np.nanmax(gq) - np.nanmin(gq))
         # remove NaNs
         #    gq = np.nan_to_num(gq)
+        gq = np.clip(gq, 0, 1)
         if debug:
-            plt.figure(); plt.imshow(gq, cmap="viridis")
+            plt.figure(); plt.imshow(gq)
         # collect channel arrays
         grid_quants.append(gq)
-    
-        
+        del gq
+       
     # Stack arrays along last dimension to produce single or multi-channel image
-    image_array = np.stack((grid_quants), axis=-1)
+    image_array = np.stack((grid_quants), axis=-1) 
     if debug:
         print(f" image shape: {image_array.shape}")
         print(f" normalized pixel value range: {np.nanmin(image_array.flatten()):.2e} - {np.nanmax(image_array.flatten()):.2e}")
@@ -180,21 +209,17 @@ def create_image(
         plt.title("Histogram of pixel values")
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
-        
+  
+    assert len(channels) == 1 or len(channels) == 3 or len(channels) == 4, f"Number of channels must be one (grayscale), three (RGB) or four (RGBA)"
+    
     if len(channels) == 1:  # Grayscale
         image_array = np.squeeze(image_array)
-        mode = "L"
-    elif len(channels) == 3:  
-        mode = "RGB"
-    elif len(channels) == 4:  
-        mode = "ARGB"
-    else:
-        raise ValueError("Unexpected image shape: {}".format(image_array.shape))
-    
-    image = Image.fromarray((np.clip(image_array, 0, 1)*255).astype(np.uint8), mode=mode)  
+        
+    image = Image.fromarray((255*image_array).astype(np.uint8)) 
+   
     # apply Gaussian smoothing
     if smoothing != 'None':
-        image = image.filter(ImageFilter.GaussianBlur(radius=smoothing/pixelScale))
+       image = image.filter(ImageFilter.GaussianBlur(radius=smoothing/pixelScale))
 
     # filepath = output_path / Path(sim, str(snapshot))
     filepath = Path(output_path)
@@ -205,10 +230,154 @@ def create_image(
     return 
 
 
+def create_opticalimage(
+    particles,
+    fov,
+    fov_unit,
+    image_size,
+    smoothing,
+    bands,
+    scale,
+    stretch,
+    Q,
+    subid,
+    orientation,
+    output_path,
+    output_format,
+    debug,
+):
+    
+    bands_ind = map_bands_to_values(bands)
+
+    if fov_unit == 'kpc':
+        max_rad = fov / 2.
+    
+    elif fov_unit == "r50":
+        rad = np.linalg.norm(particles["Coordinates"], axis=1)
+        if debug:
+            print(
+                np.min(particles["Coordinates"][:, 0]),
+                np.max(particles["Coordinates"][:, 0]),
+            )
+            print(
+                np.min(particles["Coordinates"][:, 1]),
+                np.max(particles["Coordinates"][:, 1]),
+            )
+            print(
+                np.min(particles["Coordinates"][:, 2]),
+                np.max(particles["Coordinates"][:, 2]),
+            )
+        max_rad = (fov / 2.) * np.percentile(rad, 50)
+        print(
+            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
+        )
+
+    print(f" FOV: {2*max_rad:.1f} kpc")
+
+    if orientation in ["face-on", "original", "random"]:
+        indy = 1
+
+    elif orientation == "edge-on":
+        indy = 2
+
+    img_x = particles["Coordinates"][:, 0]
+    img_y = particles["Coordinates"][:, indy]
+    #if field == "HI mass":
+    #    quantity = particles["Masses"] * particles["NeutralHydrogenAbundance"]
+    
+    # define image resolution and physical extent
+    nPixels = [image_size, image_size]
+    minMax = [-max_rad, max_rad]  # [kpc], relative to the galaxy center
+    pixelScale = 2 * max_rad / float(image_size)
+    
+    fluxes = 10**(-0.4 * particles['GFM_StellarPhotometrics'])
+    if debug:
+        print(' flux array shape, min, max:', fluxes.shape, fluxes.min(), fluxes.max())
+    
+    # count the number of particles on the grid
+    grid_npart, _, _, _ = binned_statistic_2d(
+                            img_x, 
+                            img_y, 
+                            particles['Masses'], 
+                            statistic="count", 
+                            bins=nPixels, 
+                            range=[minMax, minMax]
+    )
+    print(f" particles in FOV: {np.sum(grid_npart):.0f}")
+    
+    # calculate 2D maps by projecting particles on a grid 
+    grid_values = []
+    for i in range(len(bands_ind)):
+        gq, _, _, _ = binned_statistic_2d(
+                        img_x,
+                        img_y,
+                        fluxes[:, bands_ind[i]],
+                        statistic='sum',
+                        bins=nPixels,
+                        range=[minMax, minMax],
+        )
+        if debug:
+            plt.figure(figsize=(4,4))
+            plt.imshow(-2.5*np.log10(gq))
+            plt.colorbar()
+            plt.title(f"input {bands[i]} band [mag]")
+        if debug:
+            print(f" pixel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}")
+        # collect channel arrays
+        grid_values.append(gq)
+        del gq
+       
+    grid_values = sdss_to_rgb(grid_values[0], grid_values[1], grid_values[2],
+                              f=scale, alpha=stretch, Q=Q)
+    if debug:
+        for i, color in enumerate(['R', 'G', 'B']):
+            plt.figure(figsize=(4,4))
+            plt.imshow(grid_values[i])
+            plt.colorbar()
+            plt.title(f"scaled {color} image")
+            
+    # Stack arrays along last dimension to produce single or multi-channel image
+    image_array = np.stack((grid_values), axis=-1) 
+    if debug:
+        print(f" image shape: {image_array.shape}")
+        print(f" normalized pixel value range: {np.nanmin(image_array.flatten()):.2e} - {np.nanmax(image_array.flatten()):.2e}")
+        plt.figure(figsize=(3,2))
+        plt.hist(image_array.flatten(), bins=100, color="gray", alpha=0.7)
+        plt.title("Histogram of pixel values")
+        plt.xlabel("Intensity")
+        plt.ylabel("Frequency")
+  
+    assert len(bands) == 1 or len(bands) == 3, f"Number of channels must be one (grayscale) or three (RGB)"
+    
+    if len(bands) == 1:  # Grayscale
+        image_array = np.squeeze(image_array)
+        
+    image = Image.fromarray((255*image_array).astype(np.uint8)) 
+   
+    # apply Gaussian smoothing
+    if smoothing != 'None':
+       image = image.filter(ImageFilter.GaussianBlur(radius=smoothing))
+       
+    if debug:
+        plt.figure(figsize=(4,4))
+        plt.imshow(image)
+        plt.title('output RGB image')
+
+    # filepath = output_path / Path(sim, str(snapshot))
+    filepath = Path(output_path)
+    filepath.mkdir(parents=True, exist_ok=True)
+    filename = filepath / Path(str(subid) + "_" + 'optical' + "." + output_format)
+    image.save(filename)
+
+    return 
+
+
+
 def create_cube_PPP(
     particles,
     operation,
     fov,
+    fov_unit,
     cube_depth,
     cube_scale,
     cube_size,
@@ -222,28 +391,28 @@ def create_cube_PPP(
     debug,
 ):
 
-    if type(fov) == float:
-        max_rad = fov/2.
-    else:
-        if fov == "scaled":
-            rad = np.linalg.norm(particles["Coordinates"], axis=1)
-            if debug:
-                print(
-                    np.min(particles["Coordinates"][:, 0]),
-                    np.max(particles["Coordinates"][:, 0]),
-                )
-                print(
-                    np.min(particles["Coordinates"][:, 1]),
-                    np.max(particles["Coordinates"][:, 1]),
-                )
-                print(
-                    np.min(particles["Coordinates"][:, 2]),
-                    np.max(particles["Coordinates"][:, 2]),
-                )
-            max_rad = 1.2 * np.percentile(rad, 99)
+    if fov_unit == 'kpc':
+        max_rad = fov / 2.
+    
+    elif fov_unit == "r90":
+        rad = np.linalg.norm(particles["Coordinates"], axis=1)
+        if debug:
             print(
-                f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
+                np.min(particles["Coordinates"][:, 0]),
+                np.max(particles["Coordinates"][:, 0]),
             )
+            print(
+                np.min(particles["Coordinates"][:, 1]),
+                np.max(particles["Coordinates"][:, 1]),
+            )
+            print(
+                np.min(particles["Coordinates"][:, 2]),
+                np.max(particles["Coordinates"][:, 2]),
+            )
+        max_rad = (fov / 2.) * np.percentile(rad, 90)
+        print(
+            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
+        )
 
     print(f" FOV: {2*max_rad:.1f} kpc")
 
@@ -256,8 +425,6 @@ def create_cube_PPP(
         cube_y = particles["Coordinates"][:, 2]
         cube_z = -particles["Coordinates"][:, 1]
 
-  
-    
     #if field == "HI mass":
     #    quantity = particles["Masses"] * particles["NeutralHydrogenAbundance"]
     
@@ -354,6 +521,7 @@ def create_cube_PPV(
     particles,
     operation,
     fov,
+    fov_unit,
     cube_depth,
     cube_scale,
     cube_size,
@@ -367,10 +535,10 @@ def create_cube_PPV(
     debug,
 ):
 
-    if type(fov) == float:
-        max_rad = fov/2.
-    else:
-        if fov == "scaled":
+    if fov_unit == 'kpc':
+        max_rad = fov / 2.
+    
+    elif fov_unit == "r90":
             rad = np.linalg.norm(particles["Coordinates"], axis=1)
             vrad = np.linalg.norm(particles["Velocities"], axis=1)
             if debug:
@@ -386,8 +554,8 @@ def create_cube_PPV(
                     np.min(particles["Velocities"][:, 2]),
                     np.max(particles["Velocities"][:, 2]),
                 )
-            max_rad = 1.2 * np.percentile(rad, 99)
-            max_vrad = 1.2 * np.percentile(vrad, 99)
+            max_rad = (fov / 2.) * np.percentile(rad, 90)
+            max_vrad = (fov / 2.) * np.percentile(vrad, 90)
             print(
                 f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
             )
@@ -500,7 +668,6 @@ def create_cube_PPV(
 
 
 
-
 def rotate_x(ar, angle):
     """Rotates the snapshot about the current x-axis by 'angle' degrees."""
     angle *= np.pi / 180
@@ -540,7 +707,21 @@ def rotate_z(ar, angle):
     return np.array(np.dot(mat, ar.transpose()).transpose())
 
 
-### API helper function
+### API helper functions
+
+def get_illustris_api_key():
+    """Return the API key for the IllustrisTNG API.
+    The key can be set as an environment variable or in a file."""
+    if "ILLUSTRIS_API_KEY" in os.environ:
+        return os.environ["ILLUSTRIS_API_KEY"]
+    elif os.path.isfile("illustris_api_key.txt"):
+        with open("illustris_api_key.txt", "r") as file:
+            return file.read().rstrip()
+    raise ValueError(
+        "No API key found. Please set the ILLUSTRIS_API_KEY environment variable"
+        "or create a file named 'illustris_api_key.txt' with the API key"
+    )
+
 def get(path, key, params=None):
     # make HTTP GET request to path
     headers = {"api-key": key}
@@ -561,9 +742,9 @@ def get(path, key, params=None):
     return r
 
 
+
 ### Main routine to read data using API
 def data_preprocess_api(
-    api_key,
     sim="TNG100-1",
     snapshot=99,
     objects="centrals",
@@ -571,27 +752,29 @@ def data_preprocess_api(
     min_mass=1e8,
     max_mass=np.inf,
     component="stars",
-    output_type="image",
-    field="Masses",
+    output_type="optical image",
     operations=["sum"],
-    fov='scaled',  # [kpc]
+    fov=1.5, 
+    fov_unit = 'kpc',
     depth=4,  # [particles]
     size=128,
     smoothing='None',  # [kpc]
     channels=['Masses'],
+    bands=['u', 'g', 'r'],
     scale="log",
+    stretch=0.02,
+    Q=8.0,
     orientation="original",
     spin_aperture=30.0,  # [kpc]
     catalog_fields=["SubhaloStarMetallicity", "SubhaloSFR"],
     resolution_limit=1e9,  # [Msun]
     output_path="./images/",
-    output_format='jpg', 
+    output_format='png', 
     debug=False,
 ):
     """Preprocess data using IllustrisTNG API.
 
     Args:
-        api_key (str): API key..
         sim (str): Name of the simulation. Default is "TNG100-1".
         snapshot (int): Snapshot number. Default is 99.
         objects (str): Type of objects to process. Default is "centrals".
@@ -599,13 +782,13 @@ def data_preprocess_api(
         min_mass (float): Minimum mass for selection. Default is 1e8.
         max_mass (float): Maximum mass for selection. Default is np.inf.
         component (str): Component to process. Default is "stars".
-        output_type (str): Type of output. Default is "image".
-        field (str): Field to process. Default is "Masses".
+        output_type (str): Type of output. Default is "optical image".
         operation (str): Operation to perform. Default is "sum".
         fov (float): Field of view in kpc. Default is 'scaled'.
+        fov_unit (str): Unit of field of view. Default is 'kpc'.
         depth (int): Image depth in particles. Default is 4.
         size (int): Image size. Default is 128.
-        smoothing (float): Smoothing factor in kpc. Default is 'None'.
+        smoothing (float): Smoothing radius in pixels. Default is 'None'.
         channels (int): List of image channels. Default is ["Masses"].
         scale (str): Image scaling. Default is "log".
         orientation (str): Orientation of the image. Default is "face-on".
@@ -621,7 +804,6 @@ def data_preprocess_api(
 
     print(
         f"Parameters:\n"
-        f" api_key: {api_key}\n"
         f" simulation: {sim}\n"
         f" snapshot: {snapshot}\n"
         f" objects: {objects}\n"
@@ -629,14 +811,17 @@ def data_preprocess_api(
         f" min_mass: {min_mass:.2e} Ms, max_mass: {max_mass:.2e} Ms\n"
         f" component: {component}\n"
         f" output_type: {output_type}\n"
-        f" field: {field}\n"
         f" operations: {operations}\n"
         f" fov: {fov}\n"
+        f" fov_unit: {fov_unit}\n"
         f" depth: {depth} particles\n"
         f" size: {size} pixels\n"
-        f" smoothing: {smoothing} kpc\n"
+        f" smoothing: {smoothing} pixels\n"
         f" channels: {channels}\n"
+        f" bands: {bands}\n"
         f" scale: {scale}\n"
+        f" Q: {Q}\n"
+        f" range: {range}\n"
         f" orientation: {orientation}\n"
         f" spin_aperture: {spin_aperture:.1f} kpc\n"
         f" catalog_fields: {catalog_fields}\n"
@@ -646,7 +831,7 @@ def data_preprocess_api(
 
     global mass_units_msun, dist_units_kpc
     
-    assert len(channels)==len(operations)==len(scale), "Number of operations must match number of channels."
+    assert output_type in ["optical image", "2D map", "PPP cube", "PPV cube", "none"], f"{output_type} is not a valid output type."
 
     if objects == "centrals":
         primary_flag = [1]
@@ -662,18 +847,21 @@ def data_preprocess_api(
     if component == "dm":
         ptype = 1
 
-    if field == "Masses":
-        comp_list = "Coordinates,Velocities,Masses"
-    else:
-        comp_list = "'Coordinates,Velocities,Masses," + field + "'"
-    print("particle fields:", comp_list)
+    # if field == "Masses":
+    #     comp_list = "Coordinates,Velocities,Masses"
+    # else:
+    #     comp_list = "'Coordinates,Velocities,Masses," + field + "'"
+    # print("particle fields:", comp_list)
 
     # define API url
     url = "http://www.tng-project.org/api/" + sim + "/"
+    
+    # get api key
+    api_key = get_illustris_api_key()
 
     # get header info
     sim_info = get(url, api_key)
-    # print(sim_info)
+    print(sim_info)
     box_size = sim_info["boxsize"] / sim_info["hubble"]
     print(f"Box size:", box_size / 1e3, " Mpc")
     mass_units_msun = 1e10 / sim_info["hubble"]
@@ -694,21 +882,20 @@ def data_preprocess_api(
     print(f"selecting only {objects} with {selection_type} > {resolution_limit:.2e} Ms")
     print(f" and within {selection_type} range {min_mass:.2e} < M/Ms < {max_mass:.2e}")
 
-    # form the search_query string by hand for once
+    # form the search_query string 
     search_query = (
         "?mass_stars__gt="
         + str(min_mass / mass_units_msun)
         + "&mass_stars__lt="
         + str(max_mass / mass_units_msun)
     )
-    if debug:
-        print(search_query)
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/" + search_query,
         api_key,
         {"order_by": sorting},
     )
     print(f"\nNumber of subhalos in mass range: {subhalos['count']}\n")
+    print(type(subhalos["count"]))
 
     # Loop over subhalos to read galaxy properties and particle data
     subid = []
@@ -736,6 +923,7 @@ def data_preprocess_api(
 
         group = get(subhalo["related"]["parent_halo"] + "info.json", api_key)
         mass_halo = group["Group_M_Crit200"] * mass_units_msun
+        rvir_halo = group["Group_R_Crit200"] * dist_units_kpc
 
         if selection_type == "stellar mass":
             mass = mass_stars
@@ -762,10 +950,10 @@ def data_preprocess_api(
 
         # print galaxy info
         print("\n Galaxy:", i, " groupID:", groupid[-1], " subID:", subid[-1])
-        print(f" Mstars={m_stars[-1]:.2e} Ms, Rhalf={r_half[-1]:.2f} kpc, Mtot={mass_tot:.2e} Ms")
+        print(f" Mstars = {m_stars[-1]:.2e} Ms, Rhalf = {r_half[-1]:.2f} kpc, Mtot = {mass_tot:.2e} Ms")
 
         # load galaxy particles
-        #cutout = get(subhalo["cutouts"]["subhalo"], api_key, {component: comp_list})
+        #cutout = get(subhalo["cutouts"]["subhalo"], api_key, {component: comp_list})  # to load only specific components   
         cutout = get(subhalo["cutouts"]["subhalo"], api_key)
 
         if debug:
@@ -807,13 +995,14 @@ def data_preprocess_api(
         # rotate galaxy to desired orientation based on disk spin
         particles = rotate_galaxy(particles, orientation, spin_aperture)
 
-        # create and save image
-        if output_type == "image":
-            print(" creating image...")
-            create_image(
+        # create and save 2D map
+        if output_type == "2D map":
+            print(" creating 2D map...")
+            create_2Dmap(
                 particles,
                 operations,
                 fov,
+                fov_unit,
                 depth,
                 scale,
                 size,
@@ -827,18 +1016,38 @@ def data_preprocess_api(
                 debug,
             )
             
+         # create and save optical image
+        if output_type == "optical image":
+            print(" creating image...")
+            create_opticalimage(
+                particles,
+                fov,
+                fov_unit,
+                size,
+                smoothing,
+                bands,
+                scale,
+                stretch,
+                Q,
+                subid[-1],
+                orientation,
+                output_path,
+                output_format,
+                debug,
+            )
+            
         # create and save PPP cube
         if output_type == "PPP cube":
             print(" creating PPP cube...")
             create_cube_PPP(
                 particles,
-                operation,
+                operations,
                 fov,
                 depth,
                 scale,
                 size,
                 smoothing,
-                field,
+                channels,
                 subid[-1],
                 component,
                 orientation,
@@ -850,13 +1059,13 @@ def data_preprocess_api(
             print(" creating PPV cube...")
             create_cube_PPV(
                 particles,
-                operation,
+                operations,
                 fov,
                 depth,
                 scale,
                 size,
                 smoothing,
-                field,
+                channels,
                 subid[-1],
                 component,
                 orientation,
