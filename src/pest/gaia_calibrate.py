@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-""" Calibrate Gaia XP continuous to spectra and store to a Parquet file.
-"""
+"""Calibrate Gaia XP continuous to spectra and store to a Parquet file."""
 
 import os
 from multiprocessing import Pool
