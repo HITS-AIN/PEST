@@ -3,8 +3,8 @@ name = "pest"
 version = "0.1.0"
 description = "Preprocessing Engine for Spherinator Training"
 authors = [
-    "Bernd Doser <bernd.doser@h-its.org>",
     "Sebastian T. Gomez <sebastian.trujillogomez@h-its.org>",
+    "Bernd Doser <bernd.doser@h-its.org>",
 ]
 license = "Apache-2.0"
 readme = "README.md"
@@ -14,14 +14,14 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-h5py = "^3.11.0"
-requests = "^2.32.3"
+h5py = "^3.12.1"
 illustris-python = {git = "https://github.com/illustristng/illustris_python.git"}
-matplotlib = "^3.9.2"
-scipy = "^1.14.1"
+matplotlib = "^3.10.0"
+pytest = "^8.3.4"
 pyyaml = "^6.0.2"
-pytest = "^8.3.3"
-
+requests = "^2.32.3"
+scikit-image = "^0.25.1"
+scipy = "^1.15.1"
 
 [build-system]
 requires = ["poetry-core"]
