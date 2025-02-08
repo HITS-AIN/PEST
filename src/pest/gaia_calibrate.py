@@ -49,6 +49,12 @@ def single_convert(input_file: str, input_path: str, output_path: str):
     # Use pyarrow to write the data to a parquet file
     table = pa.Table.from_pandas(calibrated_data)
 
+    # Add shape metadata to the schema
+    data_shape = f"(1, {len(calibrated_data['flux'][0])})"
+    table = table.replace_schema_metadata(
+        metadata={"flux_shape": data_shape, "flux_error_shape": data_shape}
+    )
+
     parquet.write_table(
         table,
         os.path.join(output_path, output_file),
@@ -59,7 +65,7 @@ def single_convert(input_file: str, input_path: str, output_path: str):
 def gaia_calibrate(
     input_path: str,
     output_path: str,
-    number_of_workers: int,
+    number_of_workers: int = 1,
 ):
     """Calibrate Gaia XP continuous to spectra and store to a Parquet file.
 
