@@ -29,6 +29,12 @@ def list_csv_gz_files(directory):
 
 
 def single_convert(input_file: str, input_path: str, output_path: str):
+    output_file = f"{str(input_file).removesuffix(INPUT_FILES_SUFFIX)}.parquet"
+
+    if os.path.exists(os.path.join(output_path, output_file)):
+        print(f"File {output_file} already exists, skipping")
+        return
+
     continuous_data = pd.read_csv(
         os.path.join(input_path, input_file), comment="#", compression="gzip"
     )
@@ -44,7 +50,6 @@ def single_convert(input_file: str, input_path: str, output_path: str):
     # Use pyarrow to write the data to a parquet file
     table = pa.Table.from_pandas(calibrated_data)
 
-    output_file = f"{str(input_file).removesuffix(INPUT_FILES_SUFFIX)}.parquet"
     parquet.write_table(
         table,
         os.path.join(output_path, output_file),
