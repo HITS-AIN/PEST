@@ -33,6 +33,8 @@ def single_convert(input_file: str, input_path: str, output_path: str):
     if os.path.exists(os.path.join(output_path, output_file)):
         print(f"File {output_file} already exists, skipping")
         return
+    else:
+        print(f"Converting {input_file}")
 
     continuous_data = pd.read_csv(
         os.path.join(input_path, input_file), comment="#", compression="gzip"
