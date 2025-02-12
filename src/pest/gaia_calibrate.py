@@ -40,6 +40,9 @@ def single_convert(input_file: str, input_path: str, output_path: str):
         os.path.join(input_path, input_file), comment="#", compression="gzip"
     )
 
+    # Remove rows with missing or empty array data
+    continuous_data.dropna(subset=list_of_arrays, inplace=True)
+
     # Convert string entries to numpy arrays
     for array in list_of_arrays:
         continuous_data[array] = continuous_data[array].apply(
