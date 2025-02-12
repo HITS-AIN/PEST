@@ -51,6 +51,15 @@ def single_convert(input_file: str, input_path: str, output_path: str):
 
     calibrated_data, _ = calibrate(continuous_data, sampling=sampling, save_file=False)
 
+    # Remove the 'flux_error' column from the calibrated data
+    if "flux_error" in calibrated_data.columns:
+        calibrated_data.drop(columns=["flux_error"], inplace=True)
+
+    # Convert 'flux' column to float32
+    calibrated_data["flux"] = calibrated_data["flux"].apply(
+        lambda x: np.array(x, dtype=np.float32)
+    )
+
     # Use pyarrow to write the data to a parquet file
     table = pa.Table.from_pandas(calibrated_data)
 
