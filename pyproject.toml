@@ -30,6 +30,7 @@ gaiaxpy = "^2.1"
 black = "^25.1"
 flake8 = "^7.0"
 pytest = "^8.3"
+ipykernel = "^6.29"
 
 [build-system]
 requires = ["poetry-core"]
