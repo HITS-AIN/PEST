@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Calibrate Gaia XP continuous to spectra and store to a Parquet file."""
 
 import os
@@ -13,14 +11,27 @@ from pyarrow import parquet
 
 
 class GaiaConverter:
+    """Calibrate Gaia XP continuous to spectra and store to a Parquet file."""
+
+    input_file_suffix = ".csv.gz"
+
+    # The following columns contain string representations of numpy arrays
+    list_of_string_arrays = [
+        "bp_coefficients",
+        "bp_coefficient_errors",
+        "bp_coefficient_correlations",
+        "rp_coefficients",
+        "rp_coefficient_errors",
+        "rp_coefficient_correlations",
+    ]
 
     def __init__(
         self,
-        sampling: list[int] = np.arange(336, 1021, 2),
-        flux_error: bool = True,
+        sampling: np.ndarray = np.arange(336, 1021, 2),
+        with_flux_error: bool = True,
         number_of_workers: int = 1,
     ):
-        """Calibrate Gaia XP continuous to spectra and store to a Parquet file.
+        """Initialize the GaiaConverter.
 
         Args:
             sampling (list[int]): Wavelength sampling to use for the calibration
@@ -29,68 +40,60 @@ class GaiaConverter:
             number_of_workers (int): Number of workers to use for the conversion (default: 1).
         """
         self.sampling = sampling
-        self.flux_error = flux_error
+        self.with_flux_error = with_flux_error
         self.number_of_workers = number_of_workers
 
-    def convert(self, input_path: str, output_path: str):
-        """ "
+    def convert_all(
+        self,
+        input_directory: str,
+        output_directory: str,
+    ):
+        """Convert all Gaia XP continuous files in a directory to parquet files.
+
         Args:
-            input_path (str): Path to the directory containing the Gaia XP continuous files (.csv.gz).
-            output_path (str): Path to the directory where the parquet files will be saved.
+            input_directory (str): Path to the directory containing the Gaia XP continuous files (.csv.gz).
+            output_directory (str): Path to the directory where the parquet files will be saved.
         """
-        list_of_files = self.list_csv_gz_files(input_path)
-        print(f"Found {len(list_of_files)} files to convert")
+        os.makedirs(output_directory, exist_ok=True)
+
+        all_files = []
+        for root, _, files in os.walk(input_directory):
+            for file in files:
+                if file.endswith(self.input_file_suffix):
+                    input_file = os.path.join(root, file)
+                    output_file = os.path.join(
+                        output_directory,
+                        f"{str(file).removesuffix(self.input_file_suffix)}.parquet",
+                    )
+                    all_files.append((input_file, output_file))
+
+        print(f"Found {len(all_files)} files to convert")
 
         if self.number_of_workers == 1:
-            for file in list_of_files:
-                self.single_convert(file, input_path, output_path)
+            for input_file, output_file in all_files:
+                self.convert(input_file, output_file)
         else:
             with Pool(self.number_of_workers) as p:
-                p.starmap(
-                    self.single_convert,
-                    [(file, input_path, output_path) for file in list_of_files],
-                )
+                p.starmap(self.convert, all_files)
 
-    list_of_arrays = [
-        "bp_coefficients",
-        "bp_coefficient_errors",
-        "bp_coefficient_correlations",
-        "rp_coefficients",
-        "rp_coefficient_errors",
-        "rp_coefficient_correlations",
-    ]
-    input_file_suffix = ".csv.gz"
-
-    def list_csv_gz_files(self, directory):
-        return [
-            file
-            for file in os.listdir(directory)
-            if file.endswith(self.input_file_suffix)
-        ]
-
-    def single_convert(
+    def convert(
         self,
         input_file: str,
-        input_path: str,
-        output_path: str,
+        output_file: str,
     ):
-        output_file = f"{str(input_file).removesuffix(self.input_file_suffix)}.parquet"
-
-        if os.path.exists(os.path.join(output_path, output_file)):
+        if os.path.exists(output_file):
             print(f"File {output_file} already exists, skipping")
             return
         else:
             print(f"Converting {input_file}")
 
-        continuous_data = pd.read_csv(
-            os.path.join(input_path, input_file), comment="#", compression="gzip"
-        )
+        continuous_data = pd.read_csv(input_file, comment="#", compression="gzip")
 
         # Remove rows with missing or empty array data
-        continuous_data.dropna(subset=list_of_arrays, inplace=True)
+        continuous_data.dropna(subset=self.list_of_string_arrays, inplace=True)
 
         # Convert string entries to numpy arrays
-        for array in self.list_of_arrays:
+        for array in self.list_of_string_arrays:
             continuous_data[array] = continuous_data[array].apply(
                 lambda x: np.fromstring(x[1:-1], dtype=np.float32, sep=",")
             )
@@ -99,7 +102,7 @@ class GaiaConverter:
             continuous_data, sampling=self.sampling, save_file=False
         )
 
-        if self.flux_error:
+        if self.with_flux_error:
             # Convert 'flux' column to float32
             calibrated_data["flux_error"] = calibrated_data["flux_error"].apply(
                 lambda x: np.array(x, dtype=np.float32)
@@ -125,6 +128,6 @@ class GaiaConverter:
 
         parquet.write_table(
             table,
-            os.path.join(output_path, output_file),
+            output_file,
             compression="snappy",
         )
