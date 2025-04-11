@@ -71,11 +71,7 @@ class FitsConverter(Converter):
                     data = fits.getdata(filename, 0)
                     data = np.array(data).astype(np.float32)
                     data = self.normalize_rgb(data)
-                    # data = resize(
-                    #     data,
-                    #     (self.image_size, self.image_size),
-                    #     anti_aliasing=True,
-                    # )
+                    data = resize(data, (3, self.image_size, self.image_size))
 
                     series.append(
                         pd.Series(
