@@ -9,8 +9,10 @@ import pyarrow as pa
 from gaiaxpy import calibrate
 from pyarrow import parquet
 
+from pest.converter import Converter
 
-class GaiaConverter:
+
+class GaiaConverter(Converter):
     """Calibrate Gaia XP continuous to spectra and store to a Parquet file."""
 
     input_file_suffix = ".csv.gz"
@@ -42,39 +44,6 @@ class GaiaConverter:
         self.sampling = sampling
         self.with_flux_error = with_flux_error
         self.number_of_workers = number_of_workers
-
-    def convert_all(
-        self,
-        input_directory: str,
-        output_directory: str,
-    ):
-        """Convert all Gaia XP continuous files in a directory to parquet files.
-
-        Args:
-            input_directory (str): Path to the directory containing the Gaia XP continuous files (.csv.gz).
-            output_directory (str): Path to the directory where the parquet files will be saved.
-        """
-        os.makedirs(output_directory, exist_ok=True)
-
-        all_files = []
-        for root, _, files in os.walk(input_directory):
-            for file in files:
-                if file.endswith(self.input_file_suffix):
-                    input_file = os.path.join(root, file)
-                    output_file = os.path.join(
-                        output_directory,
-                        f"{str(file).removesuffix(self.input_file_suffix)}.parquet",
-                    )
-                    all_files.append((input_file, output_file))
-
-        print(f"Found {len(all_files)} files to convert")
-
-        if self.number_of_workers == 1:
-            for input_file, output_file in all_files:
-                self.convert(input_file, output_file)
-        else:
-            with Pool(self.number_of_workers) as p:
-                p.starmap(self.convert, all_files)
 
     def convert(
         self,
@@ -131,3 +100,40 @@ class GaiaConverter:
             output_file,
             compression="snappy",
         )
+
+    def convert_all(
+        self,
+        input_directories: str | list[str],
+        output_directory: str,
+    ):
+        """Convert all Gaia XP continuous files in a directory to parquet files.
+
+        Args:
+            input_directories (str | list[str]): Path to the directory or list of directories containing files.
+            output_directory (str): Path to the directory where the parquet files will be saved.
+        """
+        os.makedirs(output_directory, exist_ok=True)
+
+        if isinstance(input_directories, str):
+            input_directories = [input_directories]
+
+        all_files = []
+        for input_directory in input_directories:
+            for root, _, files in os.walk(input_directory):
+                for file in files:
+                    if file.endswith(self.input_file_suffix):
+                        input_file = os.path.join(root, file)
+                        output_file = os.path.join(
+                            output_directory,
+                            f"{str(file).removesuffix(self.input_file_suffix)}.parquet",
+                        )
+                        all_files.append((input_file, output_file))
+
+        print(f"Found {len(all_files)} files to convert")
+
+        if self.number_of_workers == 1:
+            for input_file, output_file in all_files:
+                self.convert(input_file, output_file)
+        else:
+            with Pool(self.number_of_workers) as p:
+                p.starmap(self.convert, all_files)
