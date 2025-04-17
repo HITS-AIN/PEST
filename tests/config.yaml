@@ -1,0 +1,15 @@
+sim: TNG50-2
+snapshot: 99
+selection_type: stellar mass
+min_mass: 5.0e+10
+max_mass: 5.2e+10
+component: stars
+objects: centrals
+field: masses
+
+image_size: 128
+image_depth: 1.0
+smoothing: 0.0
+fov: scaled
+image_scale: log
+orientation: original

@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "pest"
+version = "0.1.0"
+description = "Preprocessing Engine for Spherinator Training"
+authors = [
+    "Sebastian T. Gomez <sebastian.trujillogomez@h-its.org>",
+    "Bernd Doser <bernd.doser@h-its.org>",
+]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [
+    { include = "pest", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+h5py = "^3.12"
+illustris-python = {git = "https://github.com/illustristng/illustris_python.git"}
+matplotlib = "^3.10"
+pyyaml = "^6.0"
+requests = "^2.32"
+scikit-image = "^0.25"
+scipy = "^1.15"
+pandas = "^2.2"
+pyarrow = "^19.0"
+gaiaxpy = "^2.1"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1"
+flake8 = "^7.0"
+pytest = "^8.3"
+ipykernel = "^6.29"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
