@@ -5,8 +5,8 @@ import os
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.parquet as pq
 from astropy.io import fits
-from pyarrow import parquet
 from skimage.transform import resize
 
 from pest.converter import Converter
@@ -61,7 +61,6 @@ class FitsConverter(Converter):
         if isinstance(input_directories, str):
             input_directories = [input_directories]
 
-        series = []
         for input_directory in input_directories:
             for filename in sorted(os.listdir(input_directory)):
                 if filename.endswith(".fits"):
@@ -73,27 +72,24 @@ class FitsConverter(Converter):
                     data = self.normalize_rgb(data)
                     data = resize(data, (3, self.image_size, self.image_size))
 
-                    series.append(
-                        pd.Series(
-                            {
-                                "data": data.flatten(),
-                                "simulation": splits[-5],
-                                "snapshot": splits[-3].split("_")[1],
-                                "subhalo_id": splits[-1].split("_")[1],
-                            }
-                        )
+                    df = pd.DataFrame(
+                        {
+                            "data": data.flatten(),
+                            "simulation": splits[-5],
+                            "snapshot": splits[-3].split("_")[1],
+                            "subhalo_id": splits[-1].split("_")[1],
+                        }
                     )
 
-        df = pd.DataFrame(series)
+                    # Use pyarrow to write the data to a parquet file
+                    table = pa.Table.from_pandas(df)
 
-        # Use pyarrow to write the data to a parquet file
-        table = pa.Table.from_pandas(df)
+                    # Add shape metadata to the schema
+                    table = table.replace_schema_metadata(
+                        metadata={"data_shape": str(data.shape)}
+                    )
 
-        # Add shape metadata to the schema
-        table = table.replace_schema_metadata(metadata={"data_shape": str(data.shape)})
-
-        parquet.write_table(
-            table,
-            os.path.join(output_directory, "0.parquet"),
-            compression="snappy",
-        )
+                    pq.write_to_dataset(
+                        table,
+                        output_directory,
+                    )
