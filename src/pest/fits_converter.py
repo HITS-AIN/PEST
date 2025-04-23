@@ -19,15 +19,18 @@ class FitsConverter(Converter):
     def __init__(
         self,
         image_size: int = 128,
+        chunk_size: int = 1000,
         number_of_workers: int = 1,
     ):
         """Initialize the FitsConverter.
 
         Args:
             image_size (int): Size of the images to be converted (default: 128).
+            chunk_size (int): Size of row chunks of parquet files (default: 1000).
             number_of_workers (int): Number of workers to use for conversion (default: 1).
         """
         self.image_size = image_size
+        self.chunk_size = chunk_size
         self.number_of_workers = number_of_workers
 
         self.normalize_rgb = CreateNormalizedRGBColors(
@@ -61,6 +64,9 @@ class FitsConverter(Converter):
         if isinstance(input_directories, str):
             input_directories = [input_directories]
 
+        writer = None
+
+        # Iterate over all input directories
         for input_directory in input_directories:
             for filename in sorted(os.listdir(input_directory)):
                 if filename.endswith(".fits"):
@@ -74,7 +80,7 @@ class FitsConverter(Converter):
 
                     df = pd.DataFrame(
                         {
-                            "data": data.flatten(),
+                            "data": [data.flatten()],
                             "simulation": splits[-5],
                             "snapshot": splits[-3].split("_")[1],
                             "subhalo_id": splits[-1].split("_")[1],
@@ -89,7 +95,14 @@ class FitsConverter(Converter):
                         metadata={"data_shape": str(data.shape)}
                     )
 
-                    pq.write_to_dataset(
-                        table,
-                        output_directory,
-                    )
+                    if writer is None:
+                        writer = pq.ParquetWriter(
+                            f"{output_directory}/0.parquet",
+                            table.schema,
+                            compression="snappy",
+                        )
+
+                    writer.write_table(table, row_group_size=self.chunk_size)
+
+        if writer is not None:
+            writer.close()
