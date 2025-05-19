@@ -1,4 +1,5 @@
 __pycache__/
+.illustris_api_key.txt
 .venv/
 /data/
 /output/
