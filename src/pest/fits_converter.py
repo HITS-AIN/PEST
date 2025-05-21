@@ -82,13 +82,24 @@ class FitsConverter(Converter):
                         {
                             "data": [data.flatten()],
                             "simulation": splits[-5],
-                            "snapshot": splits[-3].split("_")[1],
-                            "subhalo_id": splits[-1].split("_")[1],
+                            "snapshot": np.int32(splits[-3].split("_")[1].lstrip("0")),
+                            "subhalo_id": np.int32(
+                                splits[-1].split("_")[1].lstrip("0")
+                            ),
                         }
                     )
 
+                    schema = pa.schema(
+                        [
+                            ("data", pa.list_(pa.float32())),
+                            ("simulation", pa.string()),
+                            ("snapshot", pa.int32()),
+                            ("subhalo_id", pa.int32()),
+                        ]
+                    )
+
                     # Use pyarrow to write the data to a parquet file
-                    table = pa.Table.from_pandas(df)
+                    table = pa.Table.from_pandas(df, schema=schema)
 
                     # Add shape metadata to the schema
                     table = table.replace_schema_metadata(
