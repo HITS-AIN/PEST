@@ -1,6 +1,6 @@
 __pycache__/
 .illustris_api_key.txt
 .venv/
-*.lock
+*.egg-info/
 /data/
 /output/

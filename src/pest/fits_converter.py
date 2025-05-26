@@ -83,9 +83,7 @@ class FitsConverter(Converter):
                             "data": [data.flatten()],
                             "simulation": splits[-5],
                             "snapshot": np.int32(splits[-3].split("_")[1].lstrip("0")),
-                            "subhalo_id": np.int32(
-                                splits[-1].split("_")[1].lstrip("0")
-                            ),
+                            "subhalo_id": np.int32(splits[-1].split("_")[1].lstrip("0")),
                         }
                     )
 
@@ -102,9 +100,7 @@ class FitsConverter(Converter):
                     table = pa.Table.from_pandas(df, schema=schema)
 
                     # Add shape metadata to the schema
-                    table = table.replace_schema_metadata(
-                        metadata={"data_shape": str(data.shape)}
-                    )
+                    table = table.replace_schema_metadata(metadata={"data_shape": str(data.shape)})
 
                     if writer is None:
                         writer = pq.ParquetWriter(

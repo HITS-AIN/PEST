@@ -4,7 +4,6 @@ from pest import GaiaConverter
 
 
 def test_gaia_converter_file(tmp_path):
-
     gaia_converter = GaiaConverter()
 
     input_file = "tests/data/gaia/XpContinuousMeanSpectrum_000000-003111.csv.gz"
@@ -18,7 +17,6 @@ def test_gaia_converter_file(tmp_path):
 
 
 def test_gaia_converter_directory(tmp_path):
-
     gaia_converter = GaiaConverter()
     gaia_converter.convert_all("tests/data/gaia", tmp_path)
 

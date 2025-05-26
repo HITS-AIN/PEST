@@ -42,10 +42,7 @@ class CreateNormalizedRGBColors:
 
         mean = np.mean(resulting_image, axis=0)
         resulting_image = (
-            resulting_image
-            * np.asinh(self.stretch * self.range * (mean - self.lower_limit))
-            / self.range
-            / mean
+            resulting_image * np.asinh(self.stretch * self.range * (mean - self.lower_limit)) / self.range / mean
         )
 
         resulting_image = np.nan_to_num(resulting_image, nan=0, posinf=0, neginf=0)
