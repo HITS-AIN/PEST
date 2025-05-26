@@ -90,9 +90,7 @@ def rotate_galaxy(particles, orientation, spin_aperture):  # [kpc]
     vel_rot = rotate_x(vel_rot, np.arctan2(norm[1], norm[2]) * 180.0 / np.pi)
     norm = rotate_x(np.array([norm]), np.arctan2(norm[1], norm[2]) * 180.0 / np.pi)[0]
 
-    print(
-        f"  spin in new rotated frame (should be [0,0,1]): {norm[0]:.3f},{norm[1]:.3f},{norm[2]:.3f}"
-    )
+    print(f"  spin in new rotated frame (should be [0,0,1]): {norm[0]:.3f},{norm[1]:.3f},{norm[2]:.3f}")
 
     particles["Coordinates"] = pos_rot
     particles["Velocities"] = vel_rot
@@ -136,9 +134,7 @@ def create_2Dmap(
                 np.max(particles["Coordinates"][:, 2]),
             )
         max_rad = (fov / 2.0) * np.percentile(rad, 50)
-        print(
-            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
-        )
+        print(f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc")
 
     print(f" FOV: {2 * max_rad:.1f} kpc")
 
@@ -194,9 +190,7 @@ def create_2Dmap(
         if image_scale[i] == "log":
             gq = np.log10(gq)
         if debug:
-            print(
-                f" pixel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}"
-            )
+            print(f" pixel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}")
         if np.nanmax(gq) > np.nanmin(gq):
             gq = (gq - np.nanmin(gq)) / (np.nanmax(gq) - np.nanmin(gq))
         # remove NaNs
@@ -281,9 +275,7 @@ def create_opticalimage(
                 np.max(particles["Coordinates"][:, 2]),
             )
         max_rad = (fov / 2.0) * np.percentile(rad, 50)
-        print(
-            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
-        )
+        print(f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc")
 
     print(f" FOV: {2 * max_rad:.1f} kpc")
 
@@ -335,16 +327,12 @@ def create_opticalimage(
             plt.colorbar()
             plt.title(f"input {bands[i]} band [mag]")
         if debug:
-            print(
-                f" pixel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}"
-            )
+            print(f" pixel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}")
         # collect channel arrays
         grid_values.append(gq)
         del gq
 
-    grid_values = sdss_to_rgb(
-        grid_values[0], grid_values[1], grid_values[2], f=scale, alpha=stretch, Q=Q
-    )
+    grid_values = sdss_to_rgb(grid_values[0], grid_values[1], grid_values[2], f=scale, alpha=stretch, Q=Q)
     if debug:
         for i, color in enumerate(["R", "G", "B"]):
             plt.figure(figsize=(4, 4))
@@ -365,9 +353,7 @@ def create_opticalimage(
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
-    assert len(bands) == 1 or len(bands) == 3, (
-        f"Number of channels must be one (grayscale) or three (RGB)"
-    )
+    assert len(bands) == 1 or len(bands) == 3, f"Number of channels must be one (grayscale) or three (RGB)"
 
     if len(bands) == 1:  # Grayscale
         image_array = np.squeeze(image_array)
@@ -428,9 +414,7 @@ def create_cube_PPP(
                 np.max(particles["Coordinates"][:, 2]),
             )
         max_rad = (fov / 2.0) * np.percentile(rad, 90)
-        print(
-            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
-        )
+        print(f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc")
 
     print(f" FOV: {2 * max_rad:.1f} kpc")
 
@@ -485,9 +469,7 @@ def create_cube_PPP(
     if cube_scale == "log":
         gq = np.log10(gq)
     if debug:
-        print(
-            f" voxel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}"
-        )
+        print(f" voxel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}")
     if np.nanmax(gq) > np.nanmin(gq):
         gq = (gq - np.nanmin(gq)) / (np.nanmax(gq) - np.nanmin(gq))
     # remove NaNs
@@ -577,12 +559,8 @@ def create_cube_PPV(
             )
         max_rad = (fov / 2.0) * np.percentile(rad, 90)
         max_vrad = (fov / 2.0) * np.percentile(vrad, 90)
-        print(
-            f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
-        )
-        print(
-            f" min, median, max v_rad: {np.min(vrad):.1f},{np.median(vrad):.1f},{np.max(vrad):.1f} kpc"
-        )
+        print(f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc")
+        print(f" min, median, max v_rad: {np.min(vrad):.1f},{np.median(vrad):.1f},{np.max(vrad):.1f} kpc")
 
     print(f" FOV: {2 * max_rad:.1f} kpc")
 
@@ -639,9 +617,7 @@ def create_cube_PPV(
     if cube_scale == "log":
         gq = np.log10(gq)
     if debug:
-        print(
-            f" voxel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}"
-        )
+        print(f" voxel value range: {np.nanmin(gq.flatten()):.2e} - {np.nanmax(gq.flatten()):.2e}")
     if np.nanmax(gq) > np.nanmin(gq):
         gq = (gq - np.nanmin(gq)) / (np.nanmax(gq) - np.nanmin(gq))
     # remove NaNs
@@ -915,10 +891,7 @@ def data_preprocess_api(
 
     # form the search_query string
     search_query = (
-        "?mass_stars__gt="
-        + str(min_mass / mass_units_msun)
-        + "&mass_stars__lt="
-        + str(max_mass / mass_units_msun)
+        "?mass_stars__gt=" + str(min_mass / mass_units_msun) + "&mass_stars__lt=" + str(max_mass / mass_units_msun)
     )
     subhalos = get(
         url + "snapshots/" + str(snapshot) + "/subhalos/" + search_query,
@@ -980,9 +953,7 @@ def data_preprocess_api(
 
         # print galaxy info
         print("\n Galaxy:", i, " groupID:", groupid[-1], " subID:", subid[-1])
-        print(
-            f" Mstars = {m_stars[-1]:.2e} Ms, Rhalf = {r_half[-1]:.2f} kpc, Mtot = {mass_tot:.2e} Ms"
-        )
+        print(f" Mstars = {m_stars[-1]:.2e} Ms, Rhalf = {r_half[-1]:.2f} kpc, Mtot = {mass_tot:.2e} Ms")
 
         # load galaxy particles
         # cutout = get(subhalo["cutouts"]["subhalo"], api_key, {component: comp_list})  # to load only specific components
@@ -991,15 +962,10 @@ def data_preprocess_api(
         if debug:
             print(f" Npart:{subhalo['len_stars']}")
 
-        subhalo_pos = (
-            np.array([subhalo["pos_x"], subhalo["pos_y"], subhalo["pos_z"]])
-            * dist_units_kpc
-        )
+        subhalo_pos = np.array([subhalo["pos_x"], subhalo["pos_y"], subhalo["pos_z"]]) * dist_units_kpc
         subhalo_vel = np.array([subhalo["vel_x"], subhalo["vel_y"], subhalo["vel_z"]])
         if debug:
-            print(
-                f" subhalo position: {subhalo_pos[0]:.2f},{subhalo_pos[1]:.2f},{subhalo_pos[2]:.2f}"
-            )
+            print(f" subhalo position: {subhalo_pos[0]:.2f},{subhalo_pos[1]:.2f},{subhalo_pos[2]:.2f}")
 
         particles = {}
         with h5py.File(cutout, "r") as f:
@@ -1013,9 +979,7 @@ def data_preprocess_api(
 
         # center coordinates and adjust for periodic boundaries
         adjusted_coordinates = particles["Coordinates"] * dist_units_kpc - subhalo_pos
-        adjusted_coordinates = (
-            np.mod(adjusted_coordinates + box_size / 2.0, box_size) - box_size / 2.0
-        )
+        adjusted_coordinates = np.mod(adjusted_coordinates + box_size / 2.0, box_size) - box_size / 2.0
         particles["Coordinates"] = adjusted_coordinates
         # center velocities
         particles["Velocities"] = particles["Velocities"] - subhalo_vel
@@ -1381,18 +1345,14 @@ def data_preprocess_local(
 
         # load galaxy particles
         print(" loading particles...")
-        particles = il.snapshot.loadSubhalo(
-            basePath, snapshot, subid, component
-        )  # all fields
+        particles = il.snapshot.loadSubhalo(basePath, snapshot, subid, component)  # all fields
         # print number of particles in the galaxy
         masses_temp = particles["Masses"] * mass_units_msun
         print(f" number of {component} particles: {len(masses_temp)}")
         print(f" total particle mass: {np.sum(masses_temp):.1e} Ms")
 
         # center the coordinates/velocities and masses
-        particles["Coordinates"] = (
-            particles["Coordinates"] - subhalo["SubhaloPos"]
-        ) * dist_units_kpc
+        particles["Coordinates"] = (particles["Coordinates"] - subhalo["SubhaloPos"]) * dist_units_kpc
         particles["Velocities"] = particles["Velocities"] - subhalo["SubhaloVel"]
         particles["Masses"] = particles["Masses"] * mass_units_msun
 

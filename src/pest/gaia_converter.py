@@ -67,33 +67,25 @@ class GaiaConverter(Converter):
                 lambda x: np.fromstring(x[1:-1], dtype=np.float32, sep=",")
             )
 
-        calibrated_data, _ = calibrate(
-            continuous_data, sampling=self.sampling, save_file=False
-        )
+        calibrated_data, _ = calibrate(continuous_data, sampling=self.sampling, save_file=False)
 
         if self.with_flux_error:
             # Convert 'flux' column to float32
-            calibrated_data["flux_error"] = calibrated_data["flux_error"].apply(
-                lambda x: np.array(x, dtype=np.float32)
-            )
+            calibrated_data["flux_error"] = calibrated_data["flux_error"].apply(lambda x: np.array(x, dtype=np.float32))
         else:
             # Remove the 'flux_error' column from the calibrated data
             if "flux_error" in calibrated_data.columns:
                 calibrated_data.drop(columns=["flux_error"], inplace=True)
 
         # Convert 'flux' column to float32
-        calibrated_data["flux"] = calibrated_data["flux"].apply(
-            lambda x: np.array(x, dtype=np.float32)
-        )
+        calibrated_data["flux"] = calibrated_data["flux"].apply(lambda x: np.array(x, dtype=np.float32))
 
         # Use pyarrow to write the data to a parquet file
         table = pa.Table.from_pandas(calibrated_data)
 
         # Add shape metadata to the schema
         data_shape = f"(1, {len(calibrated_data['flux'][0])})"
-        table = table.replace_schema_metadata(
-            metadata={"flux_shape": data_shape, "flux_error_shape": data_shape}
-        )
+        table = table.replace_schema_metadata(metadata={"flux_shape": data_shape, "flux_error_shape": data_shape})
 
         parquet.write_table(
             table,
