@@ -34,7 +34,7 @@ jobs:
         uses: astral-sh/setup-uv@v6.1.0
         with:
           version: 0.7.8
-          checksum: "db1c60961aea7a7f8c64a098801e0138e761b7556d1c1691fc4f3f771f0e47ae"
+          checksum: "285981409c746508c1fd125f66a1ea654e487bf1e4d9f45371a062338f788adb"
           enable-cache: true
 
       - run: uv --version
