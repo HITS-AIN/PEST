@@ -117,7 +117,6 @@ def create_2Dmap(
     output_format,
     debug,
 ):
-
     if fov_unit == "kpc":
         max_rad = fov / 2.0
 
@@ -141,7 +140,7 @@ def create_2Dmap(
             f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
         )
 
-    print(f" FOV: {2*max_rad:.1f} kpc")
+    print(f" FOV: {2 * max_rad:.1f} kpc")
 
     if orientation in ["face-on", "original", "random"]:
         indy = 1
@@ -223,9 +222,9 @@ def create_2Dmap(
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
-    assert (
-        len(channels) == 1 or len(channels) == 3 or len(channels) == 4
-    ), f"Number of channels must be one (grayscale), three (RGB) or four (RGBA)"
+    assert len(channels) == 1 or len(channels) == 3 or len(channels) == 4, (
+        f"Number of channels must be one (grayscale), three (RGB) or four (RGBA)"
+    )
 
     if len(channels) == 1:  # Grayscale
         image_array = np.squeeze(image_array)
@@ -261,7 +260,6 @@ def create_opticalimage(
     output_format,
     debug,
 ):
-
     bands_ind = map_bands_to_values(bands)
 
     if fov_unit == "kpc":
@@ -287,7 +285,7 @@ def create_opticalimage(
             f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
         )
 
-    print(f" FOV: {2*max_rad:.1f} kpc")
+    print(f" FOV: {2 * max_rad:.1f} kpc")
 
     if orientation in ["face-on", "original", "random"]:
         indy = 1
@@ -367,9 +365,9 @@ def create_opticalimage(
         plt.xlabel("Intensity")
         plt.ylabel("Frequency")
 
-    assert (
-        len(bands) == 1 or len(bands) == 3
-    ), f"Number of channels must be one (grayscale) or three (RGB)"
+    assert len(bands) == 1 or len(bands) == 3, (
+        f"Number of channels must be one (grayscale) or three (RGB)"
+    )
 
     if len(bands) == 1:  # Grayscale
         image_array = np.squeeze(image_array)
@@ -411,7 +409,6 @@ def create_cube_PPP(
     output_format,
     debug,
 ):
-
     if fov_unit == "kpc":
         max_rad = fov / 2.0
 
@@ -435,7 +432,7 @@ def create_cube_PPP(
             f" min, median, max radius: {np.min(rad):.1f},{np.median(rad):.1f},{np.max(rad):.1f} kpc"
         )
 
-    print(f" FOV: {2*max_rad:.1f} kpc")
+    print(f" FOV: {2 * max_rad:.1f} kpc")
 
     if orientation in ["face-on", "original", "random"]:
         cube_x = particles["Coordinates"][:, 0]
@@ -537,7 +534,7 @@ def create_cube_PPP(
         cube = img_as_float(cube)
         imsave(filename + ".tiff", cube, compression="lzw")
     size = os.path.getsize(filename)
-    print(f" saved PPP cube to {filename} with size {size/1024:.3f} KB")
+    print(f" saved PPP cube to {filename} with size {size / 1024:.3f} KB")
 
     return
 
@@ -559,7 +556,6 @@ def create_cube_PPV(
     output_format,
     debug,
 ):
-
     if fov_unit == "kpc":
         max_rad = fov / 2.0
 
@@ -588,7 +584,7 @@ def create_cube_PPV(
             f" min, median, max v_rad: {np.min(vrad):.1f},{np.median(vrad):.1f},{np.max(vrad):.1f} kpc"
         )
 
-    print(f" FOV: {2*max_rad:.1f} kpc")
+    print(f" FOV: {2 * max_rad:.1f} kpc")
 
     if orientation in ["face-on", "original", "random"]:
         cube_x = particles["Coordinates"][:, 0]
@@ -691,7 +687,7 @@ def create_cube_PPV(
         cube = img_as_float(cube)
         imsave(filename + ".tiff", cube, compression="lzw")
     size = os.path.getsize(filename)
-    print(f" saved PPV cube to {filename} with size {size/1024:.3f} KB")
+    print(f" saved PPV cube to {filename} with size {size / 1024:.3f} KB")
 
     return
 
@@ -943,7 +939,6 @@ def data_preprocess_api(
     var1 = []
 
     for i in range(subhalos["count"]):
-
         if debug:
             print(subhalos["results"][i]["url"])
 
@@ -1026,7 +1021,7 @@ def data_preprocess_api(
         particles["Velocities"] = particles["Velocities"] - subhalo_vel
         particles["Masses"] = particles["Masses"] * mass_units_msun
 
-        print(f" number of {component} particles: { len(particles['Masses']) }")
+        print(f" number of {component} particles: {len(particles['Masses'])}")
         print(f" total particle mass: {np.sum(particles['Masses']):.1e} Ms")
 
         # rotate galaxy to desired orientation based on disk spin
@@ -1323,7 +1318,6 @@ def data_preprocess_local(
 
     i = 0
     for subid in subhalos["SubhaloID"][mass_mask]:
-
         # subhalo properties
         subhalo = il.groupcat.loadSingle(basePath, snapshot, subhaloID=subid)
         ms = subhalo["SubhaloMassType"][4] * mass_units_msun
@@ -1392,7 +1386,7 @@ def data_preprocess_local(
         )  # all fields
         # print number of particles in the galaxy
         masses_temp = particles["Masses"] * mass_units_msun
-        print(f" number of {component} particles: { len(masses_temp) }")
+        print(f" number of {component} particles: {len(masses_temp)}")
         print(f" total particle mass: {np.sum(masses_temp):.1e} Ms")
 
         # center the coordinates/velocities and masses
