@@ -1,5 +1,5 @@
 [project]
-name = "pest"
+name = "astro-pest"
 version = "0.1.0"
 description = "Preprocessing Engine for Spherinator Training"
 authors = [
@@ -13,7 +13,6 @@ requires-python = ">=3.10"
 dependencies = [
     "gaiaxpy>=2.1",
     "h5py>=3.12",
-    "illustris-python@git+https://github.com/illustristng/illustris_python.git",
     "matplotlib>=3.10",
     "pandas>=2.2",
     "pyarrow>=20.0",
@@ -29,6 +28,9 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.11.11",
 ]
+illustris = [
+    "illustris-python@git+https://github.com/illustristng/illustris_python.git",
+]
 
 [build-system]
 requires = ["setuptools >= 61.0"]
@@ -39,3 +41,9 @@ line-length = 120
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true

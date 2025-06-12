@@ -25,6 +25,50 @@ wheels = [
 ]
 
 [[package]]
+name = "astro-pest"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "gaiaxpy" },
+    { name = "h5py" },
+    { name = "matplotlib" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "scikit-image" },
+    { name = "scipy" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipykernel" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+illustris = [
+    { name = "illustris-python" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gaiaxpy", specifier = ">=2.1" },
+    { name = "h5py", specifier = ">=3.12" },
+    { name = "illustris-python", marker = "extra == 'illustris'", git = "https://github.com/illustristng/illustris_python.git" },
+    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29" },
+    { name = "matplotlib", specifier = ">=3.10" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "pyarrow", specifier = ">=20.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.32" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11.11" },
+    { name = "scikit-image", specifier = ">=0.25" },
+    { name = "scipy", specifier = ">=1.15" },
+]
+provides-extras = ["dev", "illustris"]
+
+[[package]]
 name = "astropy"
 version = "6.1.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1299,48 +1343,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/66/94/68e2e17afaa9169cf
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c6/ac/dac4a63f978e4dcb3c6d3a78c4d8e0192a113d288502a1216950c41b1027/parso-0.8.4-py2.py3-none-any.whl", hash = "sha256:a418670a20291dacd2dddc80c377c5c3791378ee1e8d12bffc35420643d43f18", size = 103650, upload-time = "2024-04-05T09:43:53.299Z" },
 ]
-
-[[package]]
-name = "pest"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "gaiaxpy" },
-    { name = "h5py" },
-    { name = "illustris-python" },
-    { name = "matplotlib" },
-    { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "scikit-image" },
-    { name = "scipy" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "ipykernel" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "gaiaxpy", specifier = ">=2.1" },
-    { name = "h5py", specifier = ">=3.12" },
-    { name = "illustris-python", git = "https://github.com/illustristng/illustris_python.git" },
-    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29" },
-    { name = "matplotlib", specifier = ">=3.10" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "pyarrow", specifier = ">=20.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "requests", specifier = ">=2.32" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11.11" },
-    { name = "scikit-image", specifier = ">=0.25" },
-    { name = "scipy", specifier = ">=1.15" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "pexpect"
