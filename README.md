@@ -21,7 +21,7 @@ using downloaded snapshots. -->
 ## Installation
 
 ```bash
-pip install git+https://github.com/HITS-AIN/PEST
+pip install astra-pest
 ```
 
 ## Documentation
