@@ -1,6 +1,6 @@
 [project]
 name = "astro-pest"
-version = "0.1.0"
+version = "0.2.0"
 description = "Preprocessing Engine for Spherinator Training"
 authors = [
   {name = "Sebastian T. Gomez", email = "sebastian.trujillogomez@h-its.org"},
