@@ -82,8 +82,8 @@ class FitsConverter(Converter):
                         {
                             "data": [data.flatten()],
                             "simulation": splits[-5],
-                            "snapshot": np.int32(splits[-3].split("_")[1].lstrip("0")),
-                            "subhalo_id": np.int32(splits[-1].split("_")[1].lstrip("0")),
+                            "snapshot": np.int32(splits[-3].split("_")[1]),
+                            "subhalo_id": np.int32(splits[-1].split("_")[1]),
                         }
                     )
 
