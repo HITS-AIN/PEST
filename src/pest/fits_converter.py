@@ -1,6 +1,7 @@
 """Convert FITS files to Parquet format."""
 
 import os
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -19,19 +20,16 @@ class FitsConverter(Converter):
     def __init__(
         self,
         image_size: int = 128,
-        chunk_size: int = 1000,
-        number_of_workers: int = 1,
+        chunk_size: Optional[int] = None,
     ):
         """Initialize the FitsConverter.
 
         Args:
-            image_size (int): Size of the images to be converted (default: 128).
-            chunk_size (int): Size of row chunks of parquet files (default: 1000).
-            number_of_workers (int): Number of workers to use for conversion (default: 1).
+            image_size (int, optional): Size of the images to be converted (default: 128).
+            chunk_size (int, optional): Size of row chunks of parquet files (default: None).
         """
         self.image_size = image_size
         self.chunk_size = chunk_size
-        self.number_of_workers = number_of_workers
 
         self.normalize_rgb = CreateNormalizedRGBColors(
             stretch=0.9,
@@ -76,6 +74,11 @@ class FitsConverter(Converter):
                     data = fits.getdata(filename, 0)
                     data = np.array(data).astype(np.float32)
                     data = self.normalize_rgb(data)
+
+                    # Skip unhealthy data
+                    if np.isnan(data).any() or np.isinf(data).any() or np.all(data == data.flat[0]):
+                        continue
+
                     data = resize(data, (3, self.image_size, self.image_size))
 
                     df = pd.DataFrame(
