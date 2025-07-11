@@ -21,7 +21,7 @@ using downloaded snapshots. -->
 ## Installation
 
 ```bash
-pip install astra-pest
+pip install astro-pest
 ```
 
 ## Documentation
