@@ -1,5 +1,6 @@
 """Convert FITS files to Parquet format."""
 
+import io
 import os
 from typing import Optional
 
@@ -8,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from astropy.io import fits
+from PIL import Image
 from skimage.transform import resize
 
 from pest.converter import Converter
@@ -20,15 +22,30 @@ class FitsConverter(Converter):
     def __init__(
         self,
         image_size: int = 128,
+        datatype: str = "png",
+        flatten: bool = True,
         chunk_size: Optional[int] = None,
     ):
         """Initialize the FitsConverter.
 
         Args:
             image_size (int, optional): Size of the images to be converted (default: 128).
+            datatype (str, optional): Data type for the output files ["png", "uint8", "float32"]
+            (default: "png").
+            flatten (bool, optional): Whether to flatten the data (default: True).
+                The shape of the data will be preserved in the metadata.
             chunk_size (int, optional): Size of row chunks of parquet files (default: None).
         """
+
+        if datatype not in ["png", "uint8", "float32"]:
+            raise ValueError(f"Unsupported datatype: {datatype}. Supported types are 'png', 'uint8', and 'float32'.")
+
+        if flatten and datatype == "png":
+            raise ValueError("Flattening is not supported for PNG datatype. Set flatten=False.")
+
         self.image_size = image_size
+        self.datatype = datatype
+        self.flatten = flatten
         self.chunk_size = chunk_size
 
         self.normalize_rgb = CreateNormalizedRGBColors(
@@ -80,10 +97,34 @@ class FitsConverter(Converter):
                         continue
 
                     data = resize(data, (3, self.image_size, self.image_size))
+                    data_shape = data.shape
+
+                    if self.datatype == "float32":
+                        if self.flatten:
+                            data = data.flatten()
+                            data_schema = pa.list_(pa.float32())
+                        else:
+                            data = data.tolist()
+                            data_schema = pa.list_(pa.list_(pa.list_(pa.float32())))
+                    elif self.datatype == "uint8":
+                        data = (data * 255).astype(np.uint8)
+                        if self.flatten:
+                            data = data.flatten()
+                            data_schema = pa.list_(pa.uint8())
+                        else:
+                            data = data.tolist()
+                            data_schema = pa.list_(pa.list_(pa.list_(pa.uint8())))
+                    elif self.datatype == "png":
+                        data = (data * 255).astype(np.uint8)
+                        img = Image.fromarray(data.transpose(1, 2, 0))  # CHW to HWC
+                        png_buffer = io.BytesIO()
+                        img.save(png_buffer, format="PNG", optimize=True)
+                        data = png_buffer.getvalue()
+                        data_schema = pa.binary()
 
                     df = pd.DataFrame(
                         {
-                            "data": [data.flatten()],
+                            "data": [data],
                             "simulation": splits[-5],
                             "snapshot": np.int32(splits[-3].split("_")[1]),
                             "subhalo_id": np.int32(splits[-1].split("_")[1]),
@@ -92,7 +133,7 @@ class FitsConverter(Converter):
 
                     schema = pa.schema(
                         [
-                            ("data", pa.list_(pa.float32())),
+                            ("data", data_schema),
                             ("simulation", pa.string()),
                             ("snapshot", pa.int32()),
                             ("subhalo_id", pa.int32()),
@@ -103,7 +144,8 @@ class FitsConverter(Converter):
                     table = pa.Table.from_pandas(df, schema=schema)
 
                     # Add shape metadata to the schema
-                    table = table.replace_schema_metadata(metadata={"data_shape": str(data.shape)})
+                    if self.flatten:
+                        table = table.replace_schema_metadata(metadata={"data_shape": str(data_shape)})
 
                     if writer is None:
                         writer = pq.ParquetWriter(
