@@ -23,8 +23,9 @@ class FitsConverter(Converter):
         self,
         image_size: int = 128,
         datatype: str = "png",
-        flatten: bool = True,
-        chunk_size: Optional[int] = None,
+        flatten: bool = False,
+        chunk_size: int = 1000,
+        compression: str = "snappy",
     ):
         """Initialize the FitsConverter.
 
@@ -32,9 +33,10 @@ class FitsConverter(Converter):
             image_size (int, optional): Size of the images to be converted (default: 128).
             datatype (str, optional): Data type for the output files ["png", "uint8", "float32"]
             (default: "png").
-            flatten (bool, optional): Whether to flatten the data (default: True).
+            flatten (bool, optional): Whether to flatten the data (default: False).
                 The shape of the data will be preserved in the metadata.
-            chunk_size (int, optional): Size of row chunks of parquet files (default: None).
+            chunk_size (int, optional): Size of row chunks of parquet files (default: 1000).
+            compression (str, optional): Compression algorithm for parquet files (default: "snappy").
         """
 
         if datatype not in ["png", "uint8", "float32"]:
@@ -79,7 +81,8 @@ class FitsConverter(Converter):
         if isinstance(input_directories, str):
             input_directories = [input_directories]
 
-        writer = None
+        batch = []
+        file_idx = 0
 
         # Iterate over all input directories
         for input_directory in input_directories:
@@ -147,14 +150,21 @@ class FitsConverter(Converter):
                     if self.flatten:
                         table = table.replace_schema_metadata(metadata={"data_shape": str(data_shape)})
 
-                    if writer is None:
-                        writer = pq.ParquetWriter(
-                            f"{output_directory}/0.parquet",
-                            table.schema,
-                            compression="snappy",
+                    batch.append(table)
+                    # Write batch if chunk_size reached
+                    if self.chunk_size and len(batch) >= self.chunk_size:
+                        pq.write_table(
+                            pa.concat_tables(batch),
+                            f"{output_directory}/{file_idx}.parquet",
+                            compression=self.compression,
                         )
+                        file_idx += 1
+                        batch = []
 
-                    writer.write_table(table, row_group_size=self.chunk_size)
-
-        if writer is not None:
-            writer.close()
+        # Write any remaining data
+        if batch:
+            pq.write_table(
+                pa.concat_tables(batch),
+                f"{output_directory}/{file_idx}.parquet",
+                compression=self.compression,
+            )
