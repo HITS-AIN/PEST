@@ -2,7 +2,6 @@
 
 import io
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -49,6 +48,7 @@ class FitsConverter(Converter):
         self.datatype = datatype
         self.flatten = flatten
         self.chunk_size = chunk_size
+        self.compression = compression
 
         self.normalize_rgb = CreateNormalizedRGBColors(
             stretch=0.9,
