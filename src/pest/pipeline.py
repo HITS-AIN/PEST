@@ -26,6 +26,9 @@ class Pipeline:
     ):
         self.config = config
         self.num_workers = config.get("num_workers", 1)
+        self.transform_num_workers = config.get("transform_num_workers", self.num_workers)
+        self.batch_size = config.get("batch_size", 16)
+        self.writer_batch_size = config.get("writer_batch_size", 1000)
         self.shuffle = config.get("shuffle", True)
         self.seed = config.get("seed", 42)
 
@@ -41,6 +44,7 @@ class Pipeline:
                 "init_args": extract_cfg.get("init_args", {}),
             },
             num_proc=self.num_workers,
+            writer_batch_size=self.writer_batch_size,
         )
 
         # Shuffle before transformations to ensure randomness in filtering and augmentation
@@ -57,7 +61,12 @@ class Pipeline:
                 transform = _instantiate(transform_cfg["class_path"], transform_cfg.get("init_args", {}))
 
                 if getattr(transform, "is_filter", False):
-                    ds = ds.filter(transform, batched=False, num_proc=self.num_workers)
+                    ds = ds.filter(
+                        transform,
+                        batched=False,
+                        num_proc=self.transform_num_workers,
+                        writer_batch_size=self.writer_batch_size,
+                    )
                 else:
 
                     def apply(batch, t=transform):
@@ -76,7 +85,13 @@ class Pipeline:
                         batch["image"] = images
                         return batch
 
-                    ds = ds.map(apply, batched=True, num_proc=self.num_workers)
+                    ds = ds.map(
+                        apply,
+                        batched=True,
+                        batch_size=self.batch_size,
+                        num_proc=self.transform_num_workers,
+                        writer_batch_size=self.writer_batch_size,
+                    )
 
         # Load
         load_cfgs = self.config.get("load", [])
