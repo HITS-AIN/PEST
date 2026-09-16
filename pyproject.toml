@@ -9,13 +9,16 @@ authors = [
 license = "Apache-2.0"
 readme = "README.md"
 
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+    "datasets>=4.0",
     "gaiaxpy>=2.1",
     "h5py>=3.12",
+    "huggingface-hub>=0.33",
     "matplotlib>=3.10",
-    "pandas>=2.2",
+    "pandas>=3.0.1",
     "pyarrow>=20.0",
+    "pynbody>=2.4.1",
     "pyyaml>=6.0",
     "requests>=2.32",
     "scikit-image>=0.25",
@@ -25,9 +28,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ipykernel>=6.29",
+    "ipywidgets>=8.1.8",
+    "isort>=8.0.1",
     "pytest>=8.3",
-    "ruff>=0.11.11",
+    "ruff>=0.11",
 ]
+
+[project.scripts]
+pest = "pest.pipeline:main"
 
 [build-system]
 requires = ["setuptools >= 61.0"]
@@ -35,6 +43,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 120
+exclude = ["devel/pynbody_sebastian.ipynb"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

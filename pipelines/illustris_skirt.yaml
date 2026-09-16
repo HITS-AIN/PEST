@@ -1,0 +1,51 @@
+num_workers: 32
+shuffle: True
+seed: 42
+
+extract:
+  class_path: pest.FitsDataset
+  init_args:
+    path: data/SKIRT_synthetic_images/fits
+    columns:
+      - image
+      - simulation
+      - snapshot
+      - subhalo_id
+
+transform:
+  - column: image
+    transformations:
+      - class_path: pest.CreateNormalizedRGBColors
+        init_args:
+            stretch: 0.9
+            range: 5
+            lower_limit: 0.001
+            channel_combinations: [[2, 3], [1, 0], [0]]
+            scalers: [0.7, 0.5, 1.3]
+      - class_path: pest.FilterUnhealthyData
+      - class_path: pest.FilterTruncatedGalaxies
+        init_args:
+          threshold: 0.4
+      - class_path: pest.AlignImageHorizontally
+      - class_path: pest.FilterInclinationAngle
+        init_args:
+          max_inclination: 60
+      - class_path: pest.Crop
+        init_args:
+          relative_size: 0.5
+      - class_path: pest.ResizeImage
+        init_args:
+          size: [128, 128]
+      - class_path: pest.ReflectionalInvariance
+      - class_path: pest.GaussianBlur
+        init_args:
+          kernel_size: 3
+      - class_path: pest.AddCircularMask
+      - class_path: pest.MinMaxNormalize
+        init_args:
+          feature_range: [0, 1]
+
+load:
+  - class_path: pest.ParquetWriter
+    init_args:
+      output_path: output/illustris_skirt.parquet

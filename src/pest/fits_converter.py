@@ -12,7 +12,7 @@ from PIL import Image
 from skimage.transform import resize
 
 from pest.converter import Converter
-from pest.preprocessing import CreateNormalizedRGBColors
+from pest.create_normalized_rgb_colors import CreateNormalizedRGBColors
 
 
 class FitsConverter(Converter):

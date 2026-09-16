@@ -1,6 +1,6 @@
 [![Build Status](https://github.com/HITS-AIN/PEST/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/HITS-AIN/PEST/actions/workflows/python-package.yml?branch=main)
 [![Documentation Status](https://readthedocs.org/projects/spherinator/badge/?version=latest)](https://spherinator.readthedocs.io/en/latest/?badge=latest)
-![versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)
+![versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 
 # Preprocessing Engine for Spherinator Training (PEST)
@@ -14,7 +14,7 @@ images, 3D PPP and PPV cubes, and point clouds.
 using downloaded snapshots. -->
 
 <p align="center">
-  <img src="https://github.com/HITS-AIN/PEST/raw/main/logo.png" width="100" height="100">
+  <img src="https://github.com/HITS-AIN/PEST/raw/main/docs/assets/logo.png" width="100" height="100">
 </p>
 
 

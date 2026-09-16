@@ -1,6 +1,11 @@
 __pycache__/
+.hf_hits_ain_write.txt
 .illustris_api_key.txt
 .venv/
 *.egg-info/
+*.parquet
 /data/
+/devel/images/
+/devel/testdata/
 /output/
+data
