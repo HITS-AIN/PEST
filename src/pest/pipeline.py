@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import sys
+import time
 
 import numpy as np
 import yaml
@@ -37,6 +38,7 @@ class Pipeline:
         """Run the pipeline: extract, transform, and load data."""
 
         # Extract
+        extract_start = time.perf_counter()
         extract_cfg = self.config["extract"]
         ds = Dataset.from_generator(
             load_records,
@@ -51,8 +53,10 @@ class Pipeline:
         # Shuffle before transformations to ensure randomness in filtering and augmentation
         if self.shuffle:
             ds = ds.shuffle(seed=self.seed)
+        print(f"Extract: {len(ds)} records in {time.perf_counter() - extract_start:.2f}s")
 
         # Transform
+        transform_start = time.perf_counter()
         transform_cfgs = self.config.get("transform", [])
         for column_cfs in transform_cfgs:
             if column_cfs["column"] != "image":
@@ -60,6 +64,7 @@ class Pipeline:
 
             for transform_cfg in column_cfs.get("transformations", []):
                 transform = _instantiate(transform_cfg["class_path"], transform_cfg.get("init_args", {}))
+                step_start = time.perf_counter()
 
                 if getattr(transform, "is_filter", False):
                     ds = ds.filter(
@@ -93,13 +98,20 @@ class Pipeline:
                         num_proc=self.transform_num_workers,
                         writer_batch_size=self.writer_batch_size,
                     )
+                print(
+                    f"Transform[{transform.__class__.__name__}]: "
+                    f"{len(ds)} records in {time.perf_counter() - step_start:.2f}s"
+                )
+        print(f"Transform: {len(ds)} records in {time.perf_counter() - transform_start:.2f}s")
 
         # Load
+        load_start = time.perf_counter()
         load_cfgs = self.config.get("load", [])
         loads = [_instantiate(cfg["class_path"], cfg.get("init_args", {})) for cfg in load_cfgs]
 
         for load in loads:
             load(ds)
+        print(f"Load: {len(ds)} records in {time.perf_counter() - load_start:.2f}s")
 
 
 def main() -> None:
