@@ -1,9 +1,10 @@
 import argparse
 import importlib
+import sys
 
 import numpy as np
 import yaml
-from datasets import Dataset
+from datasets import Dataset, disable_progress_bars
 
 
 def _instantiate(class_path: str, init_args: dict):
@@ -109,6 +110,11 @@ def main() -> None:
     )
     parser.add_argument("config", help="Path to the YAML configuration file.")
     args = parser.parse_args()
+
+    # Progress bars spam log files with one line per update when stdout isn't a
+    # terminal (e.g. SLURM output redirected to a file), so disable them there.
+    if not sys.stdout.isatty():
+        disable_progress_bars()
 
     with open(args.config) as fh:
         config = yaml.safe_load(fh)
