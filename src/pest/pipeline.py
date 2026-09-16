@@ -16,8 +16,7 @@ def _instantiate(class_path: str, init_args: dict):
 
 def load_records(class_path, init_args):
     dataset = _instantiate(class_path, init_args)
-    for item in dataset:
-        yield item
+    yield from dataset
 
 
 class Pipeline:

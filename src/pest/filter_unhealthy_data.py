@@ -18,6 +18,4 @@ class FilterUnhealthyData:
             return False
         image = image.transpose(1, 2, 0)
         stats = estimate_geometry_weighted(image)
-        if np.isnan(stats["pa_rad"]):
-            return False
-        return True
+        return not np.isnan(stats["pa_rad"])

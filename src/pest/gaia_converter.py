@@ -2,6 +2,7 @@
 
 import os
 from multiprocessing import Pool
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
@@ -18,7 +19,7 @@ class GaiaConverter(Converter):
     input_file_suffix = ".csv.gz"
 
     # The following columns contain string representations of numpy arrays
-    list_of_string_arrays = [
+    list_of_string_arrays: ClassVar[list[str]] = [
         "bp_coefficients",
         "bp_coefficient_errors",
         "bp_coefficient_correlations",
@@ -29,7 +30,7 @@ class GaiaConverter(Converter):
 
     def __init__(
         self,
-        sampling: np.ndarray = np.arange(336, 1021, 2),
+        sampling: np.ndarray | None = None,
         with_flux_error: bool = True,
         number_of_workers: int = 1,
     ):
@@ -41,7 +42,7 @@ class GaiaConverter(Converter):
             flux_error (bool): Whether to include the flux error in the output (default: True).
             number_of_workers (int): Number of workers to use for the conversion (default: 1).
         """
-        self.sampling = sampling
+        self.sampling = sampling if sampling is not None else np.arange(336, 1021, 2)
         self.with_flux_error = with_flux_error
         self.number_of_workers = number_of_workers
 

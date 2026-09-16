@@ -8,7 +8,9 @@ class MinMaxNormalize:
         feature_range (list[float]): Target [min, max] range. Defaults to [0, 1].
     """
 
-    def __init__(self, feature_range: list[float] = [0, 1]):
+    def __init__(self, feature_range: list[float] | None = None):
+        if feature_range is None:
+            feature_range = [0, 1]
         self.min_val = feature_range[0]
         self.max_val = feature_range[1]
 

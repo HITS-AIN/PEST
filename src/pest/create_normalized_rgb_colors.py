@@ -7,8 +7,8 @@ class CreateNormalizedRGBColors:
         stretch: float = 0.9,
         range: int = 5,
         lower_limit: float = 0.001,
-        channel_combinations: list[list[int]] = [[2, 3], [1, 0], [0]],
-        scalers: list[float] = [0.7, 0.5, 1.3],
+        channel_combinations: list[list[int]] | None = None,
+        scalers: list[float] | None = None,
     ):
         """
         Initialize CreateNormalizedRGBColors.
@@ -20,6 +20,10 @@ class CreateNormalizedRGBColors:
             channel_combinations (list[list[int]]): List of channel combinations to create RGB images.
             scalers (list[float]): List of scalers for each channel combination.
         """
+        if scalers is None:
+            scalers = [0.7, 0.5, 1.3]
+        if channel_combinations is None:
+            channel_combinations = [[2, 3], [1, 0], [0]]
         self.stretch = stretch
         self.range = range
         self.lower_limit = lower_limit
