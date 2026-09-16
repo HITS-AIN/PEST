@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -8,8 +7,8 @@ class Particle:
 
     id: int
     mass: float
-    position: List[float]
-    velocity: List[float]
+    position: list[float]
+    velocity: list[float]
 
     def __post_init__(self):
         if len(self.position) != 3:
@@ -37,10 +36,10 @@ class Galaxy:
     id: int
     central: bool
     mass: float
-    position: List[float]
-    velocity: List[float]
-    stars: List[Star] = field(default_factory=list)
-    gas: List[Gas] = field(default_factory=list)
+    position: list[float]
+    velocity: list[float]
+    stars: list[Star] = field(default_factory=list)
+    gas: list[Gas] = field(default_factory=list)
 
     def __post_init__(self):
         if len(self.position) != 3:

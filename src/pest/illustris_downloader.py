@@ -2,7 +2,6 @@ import os
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 import requests
 
@@ -20,7 +19,7 @@ class Selector:
     max_value: float
 
 
-class IllustrisDownloader(object):
+class IllustrisDownloader:
     def __init__(
         self,
         base_url: str = "http://www.tng-project.org/api",
@@ -45,8 +44,8 @@ class IllustrisDownloader(object):
 
     def get_subhalos(
         self,
-        limit: Optional[int] = None,
-        selector: Optional[Selector] = None,
+        limit: int | None = None,
+        selector: Selector | None = None,
     ) -> dict:
         """Get subhalo ids from the Illustris API."""
 

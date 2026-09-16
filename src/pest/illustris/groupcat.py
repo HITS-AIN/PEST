@@ -1,8 +1,6 @@
 """Illustris Simulation: Public Data Release.
 groupcat.py: File I/O related to the FoF and Subfind group catalogs."""
 
-from __future__ import print_function
-
 from os.path import expanduser, isfile
 
 import h5py

@@ -1,7 +1,7 @@
 """Base class for data extractors."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 
 class Extractor(ABC):
@@ -15,7 +15,7 @@ class Extractor(ABC):
         """
 
     @abstractmethod
-    def extract(self) -> Dict[str, Any]:
+    def extract(self) -> dict[str, Any]:
         """Extract data based on the configured parameters.
 
         Returns:
@@ -24,7 +24,7 @@ class Extractor(ABC):
         ...
 
     @abstractmethod
-    def get_available_fields(self, component: str) -> List[str]:
+    def get_available_fields(self, component: str) -> list[str]:
         """Get available fields for a given component.
 
         Args:

@@ -14,8 +14,6 @@ from .gaia_converter import GaiaConverter
 from .gaussian_blur import GaussianBlur
 from .illustris_downloader import IllustrisDownloader, PropertyType, Selector
 from .illustris_extractor import IllustrisExtractor
-from .illustris_preprocess_api import data_preprocess_api
-from .illustris_preprocess_local import data_preprocess_local
 from .illustris_skirt_reader import IllustrisSkirtReader
 from .min_max_normalize import MinMaxNormalize
 from .orientation import estimate_geometry_weighted, visualize_results
@@ -32,9 +30,6 @@ __all__ = [
     "Count",
     "CreateNormalizedRGBColors",
     "Crop",
-    "data_preprocess_api",
-    "data_preprocess_local",
-    "estimate_geometry_weighted",
     "FilterInclinationAngle",
     "FilterTruncatedGalaxies",
     "FilterUnhealthyData",
@@ -53,5 +48,8 @@ __all__ = [
     "ReflectionalInvariance",
     "ResizeImage",
     "Selector",
+    "data_preprocess_api",
+    "data_preprocess_local",
+    "estimate_geometry_weighted",
     "visualize_results",
 ]

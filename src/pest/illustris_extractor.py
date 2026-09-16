@@ -1,7 +1,7 @@
 """Extractor for IllustrisTNG simulation data."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -53,7 +53,7 @@ class IllustrisExtractor(Extractor):
         simulation: str = "TNG50-1",
         snapshot: int = 99,
         objects: str = "centrals",
-        component: Optional[List[Dict[str, Any]]] = None,
+        component: list[dict[str, Any]] | None = None,
     ):
         """Initialize the IllustrisExtractor.
 
@@ -92,7 +92,7 @@ class IllustrisExtractor(Extractor):
         # Validate configuration on initialization
         self.validate_configuration()
 
-    def extract(self) -> Dict[str, Any]:
+    def extract(self) -> dict[str, Any]:
         """Extract data based on the configured parameters.
 
         Returns:
@@ -140,7 +140,7 @@ class IllustrisExtractor(Extractor):
 
         return extracted_data
 
-    def get_available_fields(self, component: str) -> List[str]:
+    def get_available_fields(self, component: str) -> list[str]:
         """Get available fields for a given component.
 
         Args:
@@ -207,7 +207,7 @@ class IllustrisExtractor(Extractor):
         else:  # "all"
             return np.ones(len(subhalo_gr_nr), dtype=bool)
 
-    def _apply_selector(self, subhalos: Dict[str, np.ndarray], selector: Dict[str, Any]) -> np.ndarray:
+    def _apply_selector(self, subhalos: dict[str, np.ndarray], selector: dict[str, Any]) -> np.ndarray:
         """Apply mass selection criteria."""
         selector_type = selector["type"]
         min_mass = selector["min"]
@@ -279,7 +279,7 @@ class IllustrisExtractor(Extractor):
 
         return data
 
-    def _validate_selector(self, selector: Dict[str, Any]) -> bool:
+    def _validate_selector(self, selector: dict[str, Any]) -> bool:
         """Validate selector configuration."""
         required_keys = ["type", "min", "max"]
         for key in required_keys:
