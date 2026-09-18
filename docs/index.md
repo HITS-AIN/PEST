@@ -3,16 +3,15 @@
 PEST converts raw astrophysical simulation data into clean, structured training datasets for
 [Spherinator](https://github.com/HITS-AIN/Spherinator) and [HiPSter](https://github.com/HITS-AIN/HiPSter).
 
-## Installation
+![](assets/pipeline.png)
 
-```bash
-pip install astro-pest
-```
+
 
 ```{toctree}
 :maxdepth: 2
 :hidden:
 
+install
 usage
 api
 ```
