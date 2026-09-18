@@ -1,9 +1,9 @@
 """Sphinx configuration."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 project = "PEST"
-copyright = f"{datetime.now().year}, HITS gGmbH"
+copyright = f"{datetime.now(tz=UTC).year}, HITS gGmbH"
 author = """Bernd Doser <bernd.doser@h-its.org>,
             Sebastian T. Gomez <sebastian.trujillogomez@h-its.org>"""
 
