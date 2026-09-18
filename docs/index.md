@@ -1,3 +1,7 @@
+```{toctree}
+:maxdepth: 2
+```
+
 # PEST — Preprocessing Engine for Spherinator Training
 
 PEST converts raw astrophysical simulation data into clean, structured training datasets for
