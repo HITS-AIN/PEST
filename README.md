@@ -1,5 +1,5 @@
 [![Build Status](https://github.com/HITS-AIN/PEST/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/HITS-AIN/PEST/actions/workflows/python-package.yml?branch=main)
-[![Documentation Status](https://readthedocs.org/projects/spherinator/badge/?version=latest)](https://spherinator.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/pest/badge/?version=latest)](https://pest.readthedocs.io/en/latest/?badge=latest)
 ![versions](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
 
 
@@ -26,9 +26,9 @@ pip install astro-pest
 
 ## Documentation
 
-The `PEST` documentation is part of the Spherinator documentation and can be found at:
+The `PEST` documentation, including the API reference, is available at:
 
-[Read The Docs](https://spherinator.readthedocs.io/en/latest/pest.html)
+[Read The Docs](https://pest.readthedocs.io/en/latest/)
 
 
 ## Acknowledgments

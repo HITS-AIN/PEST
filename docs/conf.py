@@ -11,13 +11,19 @@ extensions = [
     "myst_parser",
     "sphinxcontrib.bibtex",
     "sphinx_rtd_theme",
-    # "recommonmark",
-    # "sphinx.ext.autodoc",
-    # "sphinx.ext.napoleon",
-    # "sphinx_autodoc_typehints",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx_autodoc_typehints",
 ]
 
 bibtex_bibfiles = ["references.bib"]
-html_logo = "../docs/assests/logo.png"
+html_logo = "assests/logo.png"
+html_favicon = "assests/logo.png"
 html_theme = "sphinx_rtd_theme"
-html_theme_options = {"logo_only": True, "display_version": True}
+html_theme_options = {"logo_only": True}
+
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+napoleon_google_docstring = True
+napoleon_numpy_docstring = False
