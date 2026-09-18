@@ -80,32 +80,4 @@ load:
 Any extractor or transformation can be replaced by a custom class — set `class_path` to a
 fully-qualified `module.ClassName` string and PEST will import and instantiate it automatically.
 
-## Point-cloud pipelines
-
-For particle-based outputs (point clouds), the `IllustrisExtractor` yields per-galaxy particle
-tables for stars, gas, and dark matter. The result is written with `ParquetWriter` without any
-image transformations:
-
-```yaml
-extract:
-  class_path: pest.IllustrisExtractor
-  init_args:
-    simulation_path: /data/Illustris
-    simulation: TNG50-1
-    snapshot: 99
-    objects: centrals
-    component:
-      - name: stars
-        fields: [masses, positions, velocities, ages, metallicities]
-        selector:
-          type: stellar mass
-          min: 5.0e+10
-          max: 5.2e+10
-
-load:
-  - class_path: pest.ParquetWriter
-    init_args:
-      output_path: output/pointcloud.parquet
-```
-
 See the {doc}`API reference <api>` for the full list of built-in extractors, transformations, and loaders.
