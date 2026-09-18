@@ -18,4 +18,5 @@ extensions = [
 ]
 
 html_theme = "sphinx_rtd_theme"
+html_logo = "../docs/assests/logo.png"
 bibtex_bibfiles = ["references.bib"]
