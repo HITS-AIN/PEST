@@ -17,6 +17,7 @@ extensions = [
     # "sphinx_autodoc_typehints",
 ]
 
-html_theme = "sphinx_rtd_theme"
-html_logo = "../docs/assests/logo.png"
 bibtex_bibfiles = ["references.bib"]
+html_logo = "../docs/assests/logo.png"
+html_theme = "sphinx_rtd_theme"
+html_theme_options = {"logo_only": True, "display_version": False}
