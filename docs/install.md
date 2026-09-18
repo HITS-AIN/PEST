@@ -10,7 +10,7 @@ We recommend installing into a virtual environment rather than system-wide:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate      # on Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
 pip install astro-pest
 ```
@@ -21,7 +21,7 @@ If you have [uv](https://docs.astral.sh/uv/) installed, it manages the virtual e
 
 ```bash
 uv venv
-source .venv/bin/activate      # on Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
 uv pip install astro-pest
 ```

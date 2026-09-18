@@ -6,7 +6,6 @@ PEST converts raw astrophysical simulation data into clean, structured training 
 ```{figure} assets/pipeline.png
 ---
 name: fig:ML pipeline
-width: 300px
 align: center
 ---
 ```
