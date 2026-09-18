@@ -18,8 +18,8 @@ extensions = [
 ]
 
 bibtex_bibfiles = ["references.bib"]
-html_logo = "assests/logo.png"
-html_favicon = "assests/logo.png"
+html_logo = "assets/logo.png"
+html_favicon = "assets/logo.png"
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {"logo_only": True}
 

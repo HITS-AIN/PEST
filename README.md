@@ -14,7 +14,7 @@ images, 3D PPP and PPV cubes, and point clouds.
 using downloaded snapshots. -->
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/HITS-AIN/PEST/main/docs/assests/logo.png" width="100" height="100">
+  <img src="https://raw.githubusercontent.com/HITS-AIN/PEST/main/docs/assets/logo.png" width="100" height="100">
 </p>
 
 
