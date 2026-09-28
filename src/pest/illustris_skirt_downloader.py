@@ -19,22 +19,11 @@ SKIRT_URLS = [
 
 
 def get_illustris_api_key() -> str:
-    """Return the API key for the Illustris/TNG API.
-
-    The key can be set via the ILLUSTRIS_API_KEY environment variable or in a
-    '.illustris_api_key.txt' file in the project root directory.
-    """
+    """Return the API key for the Illustris/TNG API from the ILLUSTRIS_API_KEY environment variable."""
     if "ILLUSTRIS_API_KEY" in os.environ:
         return os.environ["ILLUSTRIS_API_KEY"]
 
-    api_file = Path(__file__).resolve().parents[2] / ".illustris_api_key.txt"
-    if api_file.is_file():
-        return api_file.read_text().strip()
-
-    raise ValueError(
-        "No API key found. Please set the ILLUSTRIS_API_KEY environment variable "
-        "or create a file named '.illustris_api_key.txt' with the API key."
-    )
+    raise ValueError("No API key found. Please set the ILLUSTRIS_API_KEY environment variable.")
 
 
 def get_simulation_name(url: str) -> str:

@@ -136,7 +136,6 @@ def test_get_illustris_api_key_missing(monkeypatch):
     from pest.illustris_skirt_downloader import get_illustris_api_key
 
     monkeypatch.delenv("ILLUSTRIS_API_KEY", raising=False)
-    monkeypatch.setattr("pest.illustris_skirt_downloader.Path.is_file", lambda self: False)
 
     with pytest.raises(ValueError):
         get_illustris_api_key()

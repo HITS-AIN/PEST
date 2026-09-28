@@ -126,9 +126,8 @@ pest-download-skirt data/illustris_skirt
 ```
 
 It requires an Illustris/TNG API key, provided via the `ILLUSTRIS_API_KEY` environment
-variable or a `.illustris_api_key.txt` file in the project root. Files that already exist
-in the destination simulation directory are skipped, and each tarball is deleted after
-being extracted.
+variable. Files that already exist in the destination simulation directory are skipped,
+and each tarball is deleted after being extracted.
 
 By default it downloads a built-in list of TNG50, TNG100, and Illustris SDSS tarballs. Pass
 `--urls-file` to download a custom list instead (one URL per line):
