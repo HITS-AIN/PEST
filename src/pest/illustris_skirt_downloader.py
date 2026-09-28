@@ -108,7 +108,7 @@ def main() -> None:
 
     if args.urls_file:
         with open(args.urls_file) as fh:
-            urls = [line.strip() for line in fh if line.strip()]
+            urls = [line.strip() for line in fh if line.strip() and not line.strip().startswith("#")]
     else:
         urls = SKIRT_URLS
 

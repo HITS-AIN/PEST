@@ -1,0 +1,3 @@
+# Only download one Illustris SDSS tarball for testing
+
+http://www.tng-project.org/api/TNG50-1/files/skirt_images_sdss.95.tar
