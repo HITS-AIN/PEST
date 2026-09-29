@@ -52,6 +52,6 @@ jobs:
       #     wget -P data/TNG50-1/groups_099 -nc --content-disposition --header="API-Key: ${{ secrets.ILLUSTRIS_API_KEY }}" "http://www.tng-project.org/api/TNG50-1/files/groupcat-099.0.hdf5"
 
       - name: Run unit tests
-        run: uv run --extra dev -p ${{ matrix.python-version }} pytest
+        run: uv run --extra dev --extra hf -p ${{ matrix.python-version }} pytest
         env:
           ILLUSTRIS_API_KEY: ${{ secrets.ILLUSTRIS_API_KEY }}

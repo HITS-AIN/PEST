@@ -11,10 +11,8 @@ readme = "README.md"
 
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "datasets>=4.0",
     "gaiaxpy>=2.1",
     "h5py>=3.12",
-    "huggingface-hub>=0.33",
     "matplotlib>=3.10",
     "pandas>=3.0.1",
     "pyarrow>=20.0",
@@ -26,6 +24,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Only needed for the optional `pest.HuggingFaceWriter` load step.
+hf = [
+    "datasets>=4.0",
+    "huggingface-hub>=0.33",
+]
 dev = [
     "ipykernel>=6.29",
     "ipywidgets>=8.1.8",
@@ -45,6 +48,7 @@ docs = [
 
 [project.scripts]
 pest = "pest.pipeline:main"
+pest-download-skirt = "pest.illustris_skirt_downloader:main"
 
 [build-system]
 requires = ["setuptools >= 61.0"]

@@ -11,16 +11,16 @@ def estimate_geometry_weighted(
     """Estimate galaxy geometry using weighted moments.
 
     Arguments:
-        img: Image array (can be RGB or grayscale).
+        img: Image array in (C, H, W) order (can be multi-channel or grayscale).
         q0: Intrinsic axis ratio for edge-on galaxies (default 0.2).
         bg_subtract: Fraction of the median to subtract as background (default 0.1).
     Returns:
         Dictionary containing inclination, position angle, major/minor axes, and centroid.
     """
 
-    # 1. If RGB, convert to grayscale
-    if img.ndim == 3 and img.shape[2] >= 3:
-        img = np.mean(img, axis=-1)
+    # 1. If multi-channel, convert to grayscale
+    if img.ndim == 3 and img.shape[0] >= 3:
+        img = np.mean(img, axis=0)
 
     # 2. Basic Background Subtraction
     # Moments are very sensitive to background noise.

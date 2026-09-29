@@ -8,8 +8,5 @@ class AlignImageHorizontally:
     """Rotate a (C, H, W) image so that the galaxy major axis is horizontal."""
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
-        # Pipeline format is (C, H, W); orientation functions expect (H, W, C)
-        image = image.transpose(1, 2, 0)
         stats = estimate_geometry_weighted(image)
-        image = rotate(image, np.degrees(stats["pa_rad"]), reshape=True)
-        return image.transpose(2, 0, 1)
+        return rotate(image, np.degrees(stats["pa_rad"]), axes=(2, 1), reshape=True)

@@ -1,0 +1,17 @@
+num_workers: 1
+shuffle: False
+
+extract:
+  class_path: pest.IllustrisSkirtDataset
+  init_args:
+    path: tests/data/illustris_tng_skirt
+    columns:
+      - simulation
+      - snapshot
+      - subhalo_id
+      - [sersic_n, r]
+
+load:
+  - class_path: pest.ParquetWriter
+    init_args:
+      output_path: output.parquet

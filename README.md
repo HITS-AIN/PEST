@@ -10,9 +10,6 @@ PEST preprocess simulation data and generate training data for
 [HiPSter](https://github.com/HITS-AIN/HiPSter), including arbitrary single- and multi-channel
 images, 3D PPP and PPV cubes, and point clouds.
 
-<!-- It is currently designed to work with IllustrisTNG data, either through the web-based API or locally
-using downloaded snapshots. -->
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/HITS-AIN/PEST/main/docs/assets/logo.png" width="100" height="100">
 </p>

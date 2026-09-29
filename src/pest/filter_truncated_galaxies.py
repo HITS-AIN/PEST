@@ -21,8 +21,7 @@ class FilterTruncatedGalaxies:
 
     def __call__(self, sample) -> bool:
         image = np.array(sample["image"] if isinstance(sample, dict) else sample)
-        img_hwc = np.moveaxis(image, 0, -1)
-        stats = estimate_geometry_weighted(img_hwc.copy(), bg_subtract=0.0)
+        stats = estimate_geometry_weighted(image.copy(), bg_subtract=0.0)
         major_axis = stats["major_axis"]
-        image_size = max(img_hwc.shape[:2])
+        image_size = max(image.shape[-2:])
         return major_axis / image_size < self.threshold

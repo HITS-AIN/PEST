@@ -1,11 +1,48 @@
 import argparse
 import importlib
-import sys
+import importlib.metadata
+import multiprocessing
+import os
+import subprocess
 import time
 
 import numpy as np
 import yaml
-from datasets import Dataset, disable_progress_bars
+
+
+def _git_commit() -> str:
+    """Return the short git commit hash of the running source checkout, if available."""
+    pkg_dir = os.path.dirname(__file__)
+    try:
+        # A non-editable install just copies this file into site-packages,
+        # which may happen to sit inside some unrelated project's git
+        # checkout. Only trust the result if this file is actually tracked
+        # by the repo found there.
+        subprocess.check_output(
+            ["git", "ls-files", "--error-unmatch", os.path.basename(__file__)],
+            cwd=pkg_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=pkg_dir,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (subprocess.CalledProcessError, OSError):
+        return "unknown"
+
+
+def print_header() -> None:
+    """Print a header with the PEST version and git commit."""
+    version = importlib.metadata.version("astro-pest")
+    commit = _git_commit()
+    title = f"PEST pipeline v{version} ({commit})"
+    width = len(title) + 4
+    print("=" * width)
+    print(f"  {title}")
+    print("=" * width)
 
 
 def _instantiate(class_path: str, init_args: dict):
@@ -16,9 +53,69 @@ def _instantiate(class_path: str, init_args: dict):
     return cls(**init_args)
 
 
-def load_records(class_path, init_args):
-    dataset = _instantiate(class_path, init_args)
-    yield from dataset
+class _TransformStep:
+    """A single transform (or filter) bound to the column it operates on."""
+
+    def __init__(self, column: str, transform):
+        self.column = column
+        self.transform = transform
+        self.is_filter = getattr(transform, "is_filter", False)
+
+    @property
+    def name(self) -> str:
+        return self.transform.__class__.__name__
+
+
+def _build_steps(transform_cfgs: list[dict]) -> list[_TransformStep]:
+    """Instantiate the transform chain, enforcing the single-column restriction."""
+    steps = []
+    for column_cfg in transform_cfgs:
+        if column_cfg["column"] != "image":
+            raise NotImplementedError("Currently only 'image' column transformations are supported.")
+        for transform_cfg in column_cfg.get("transformations", []):
+            transform = _instantiate(transform_cfg["class_path"], transform_cfg.get("init_args", {}))
+            steps.append(_TransformStep(column_cfg["column"], transform))
+    return steps
+
+
+# Populated once per worker process by `_init_worker`, so the dataset and the
+# transform chain are each built only once and then reused for every record
+# that worker handles.
+_worker_state: dict = {}
+
+
+def _init_worker(extract_cfg: dict, transform_cfgs: list[dict]) -> None:
+    """Pool initializer: build one dataset instance and one transform chain per worker."""
+    _worker_state["dataset"] = _instantiate(extract_cfg["class_path"], extract_cfg.get("init_args", {}))
+    _worker_state["steps"] = _build_steps(transform_cfgs)
+
+
+def _process_record(index: int) -> tuple[dict | None, str | None]:
+    """Extract one record and run the full transform chain on it in a single pass.
+
+    Returns ``(record, None)`` when the record survives, or ``(None, filter_name)``
+    naming the filter step that dropped it.
+    """
+    dataset = _worker_state["dataset"]
+    steps = _worker_state["steps"]
+    record = dataset[index]
+
+    for step in steps:
+        try:
+            if step.is_filter:
+                if not step.transform(record):
+                    return None, step.name
+            else:
+                record[step.column] = step.transform(np.array(record[step.column]))
+        except Exception as e:
+            print(
+                f"Transform {step.name} failed for "
+                f"simulation={record.get('simulation')}, "
+                f"snapshot={record.get('snapshot')}, "
+                f"subhalo_id={record.get('subhalo_id')}: {e}"
+            )
+            raise
+    return record, None
 
 
 class Pipeline:
@@ -28,81 +125,57 @@ class Pipeline:
     ):
         self.config = config
         self.num_workers = config.get("num_workers", 1)
-        self.transform_num_workers = config.get("transform_num_workers", self.num_workers)
         self.batch_size = config.get("batch_size", 16)
-        self.writer_batch_size = config.get("writer_batch_size", 1000)
         self.shuffle = config.get("shuffle", True)
         self.seed = config.get("seed", 42)
 
     def run(self) -> None:
-        """Run the pipeline: extract, transform, and load data."""
+        """Run the pipeline: extract, transform, and load data.
 
-        # Extract
-        extract_start = time.perf_counter()
+        Extraction and transformation are fused into a single pass per record:
+        each worker loads one record and immediately runs the whole transform
+        chain on it, instead of rewriting the full dataset once per step.
+        """
         extract_cfg = self.config["extract"]
-        ds = Dataset.from_generator(
-            load_records,
-            gen_kwargs={
-                "class_path": extract_cfg["class_path"],
-                "init_args": extract_cfg.get("init_args", {}),
-            },
-            num_proc=self.num_workers,
-            writer_batch_size=self.writer_batch_size,
-        )
-
-        # Shuffle before transformations to ensure randomness in filtering and augmentation
-        if self.shuffle:
-            ds = ds.shuffle(seed=self.seed)
-        print(f"Extract: {len(ds)} records in {time.perf_counter() - extract_start:.2f}s")
-
-        # Transform
-        transform_start = time.perf_counter()
         transform_cfgs = self.config.get("transform", [])
-        for column_cfs in transform_cfgs:
-            if column_cfs["column"] != "image":
-                raise NotImplementedError("Currently only 'image' column transformations are supported.")
 
-            for transform_cfg in column_cfs.get("transformations", []):
-                transform = _instantiate(transform_cfg["class_path"], transform_cfg.get("init_args", {}))
-                step_start = time.perf_counter()
+        # Instantiated once here just to get the record count; each worker
+        # below builds its own instance to avoid pickling/sharing file handles.
+        dataset = _instantiate(extract_cfg["class_path"], extract_cfg.get("init_args", {}))
+        num_records = len(dataset)
+        del dataset
 
-                if getattr(transform, "is_filter", False):
-                    ds = ds.filter(
-                        transform,
-                        batched=False,
-                        num_proc=self.transform_num_workers,
-                        writer_batch_size=self.writer_batch_size,
-                    )
-                else:
+        indices = np.arange(num_records)
+        if self.shuffle:
+            np.random.default_rng(self.seed).shuffle(indices)
 
-                    def apply(batch, t=transform):
-                        images = []
-                        for i, img in enumerate(batch["image"]):
-                            try:
-                                images.append(t(np.array(img)))
-                            except Exception as e:
-                                print(
-                                    f"Transform {t.__class__.__name__} failed for "
-                                    f"simulation={batch.get('simulation', [None])[i]}, "
-                                    f"snapshot={batch.get('snapshot', [None])[i]}, "
-                                    f"subhalo_id={batch.get('subhalo_id', [None])[i]}: {e}"
-                                )
-                                raise
-                        batch["image"] = images
-                        return batch
+        transform_start = time.perf_counter()
+        if self.num_workers > 1:
+            with multiprocessing.Pool(
+                self.num_workers,
+                initializer=_init_worker,
+                initargs=(extract_cfg, transform_cfgs),
+            ) as pool:
+                results = list(pool.imap(_process_record, indices, chunksize=max(1, self.batch_size)))
+        else:
+            _init_worker(extract_cfg, transform_cfgs)
+            results = [_process_record(i) for i in indices]
 
-                    ds = ds.map(
-                        apply,
-                        batched=True,
-                        batch_size=self.batch_size,
-                        num_proc=self.transform_num_workers,
-                        writer_batch_size=self.writer_batch_size,
-                    )
-                print(
-                    f"Transform[{transform.__class__.__name__}]: "
-                    f"{len(ds)} records in {time.perf_counter() - step_start:.2f}s"
-                )
-        print(f"Transform: {len(ds)} records in {time.perf_counter() - transform_start:.2f}s")
+        records = []
+        dropped_counts: dict[str, int] = {}
+        for record, dropped_by in results:
+            if record is not None:
+                records.append(record)
+            else:
+                dropped_counts[dropped_by] = dropped_counts.get(dropped_by, 0) + 1
+        del results
+
+        print(
+            f"Extract+Transform: kept {len(records)}/{num_records} records "
+            f"in {time.perf_counter() - transform_start:.2f}s"
+        )
+        for name, count in dropped_counts.items():
+            print(f"  dropped by {name}: {count}")
 
         # Load
         load_start = time.perf_counter()
@@ -110,23 +183,21 @@ class Pipeline:
         loads = [_instantiate(cfg["class_path"], cfg.get("init_args", {})) for cfg in load_cfgs]
 
         for load in loads:
-            load(ds)
-        print(f"Load: {len(ds)} records in {time.perf_counter() - load_start:.2f}s")
+            load(records)
+        print(f"Load: {len(records)} records in {time.perf_counter() - load_start:.2f}s")
 
 
 def main() -> None:
     """CLI entry point: read a YAML config file and run the pipeline."""
+
+    print_header()
+
     parser = argparse.ArgumentParser(
         prog="pest",
         description="Preprocessing Engine for Spherinator Training",
     )
     parser.add_argument("config", help="Path to the YAML configuration file.")
     args = parser.parse_args()
-
-    # Progress bars spam log files with one line per update when stdout isn't a
-    # terminal (e.g. SLURM output redirected to a file), so disable them there.
-    if not sys.stdout.isatty():
-        disable_progress_bars()
 
     with open(args.config) as fh:
         config = yaml.safe_load(fh)

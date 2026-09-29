@@ -16,6 +16,5 @@ class FilterUnhealthyData:
         image = np.array(sample["image"])
         if np.isnan(image).any() or np.isinf(image).any() or np.all(image == image.flat[0]):
             return False
-        image = image.transpose(1, 2, 0)
         stats = estimate_geometry_weighted(image)
         return not np.isnan(stats["pa_rad"])

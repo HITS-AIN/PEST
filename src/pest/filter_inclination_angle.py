@@ -21,7 +21,5 @@ class FilterInclinationAngle:
 
     def __call__(self, sample: dict) -> bool:
         image = np.array(sample["image"])
-        # Pipeline format is (C, H, W); estimate_geometry_weighted expects (H, W, C)
-        img_hwc = np.moveaxis(image, 0, -1)
-        stats = estimate_geometry_weighted(img_hwc.copy())
+        stats = estimate_geometry_weighted(image.copy())
         return stats["inclination_deg"] <= self.max_inclination

@@ -3,9 +3,10 @@ __pycache__/
 .illustris_api_key.txt
 .venv/
 *.egg-info/
+*.hdf5
 *.parquet
 /data/
 /devel/images/
 /devel/testdata/
 /output/
-data
+build/
