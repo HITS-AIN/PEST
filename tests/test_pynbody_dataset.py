@@ -246,9 +246,9 @@ def test_render_stars(fake_pynbody, fake_render):
 
     record = step({"subhalo_id": np.int32(3)})
 
-    assert record["image"].shape == (4, 4, 3)
+    assert record["image"].shape == (3, 4, 4)
     assert record["image"].dtype == np.float32
-    np.testing.assert_allclose(record["image"][-1], 1.0)
+    np.testing.assert_allclose(record["image"][:, -1], 1.0)
     assert [call[0] for call in fake_render] == ["center", "render"]
     _, centered_halo, center_kwargs = fake_render[0]
     _, rendered_halo, render_kwargs = fake_render[1]
@@ -268,7 +268,7 @@ def test_pipeline_renders_stars(fake_pynbody, fake_render, tmp_path):
     df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
 
     assert list(df["subhalo_id"]) == [1, 3]
-    assert np.stack([np.stack(row) for row in df.iloc[0]["image"]]).shape == (4, 4, 3)
+    assert np.stack([np.stack(row) for row in df.iloc[0]["image"]]).shape == (3, 4, 4)
 
 
 def test_render_stars_without_stars(fake_pynbody, fake_render, monkeypatch):
@@ -322,4 +322,4 @@ def test_tng_render_stars():
     step = RenderStars(resolution=16)
     step.bind(dataset)
 
-    assert step(dataset[0])["image"].shape == (16, 16, 3)
+    assert step(dataset[0])["image"].shape == (3, 16, 16)

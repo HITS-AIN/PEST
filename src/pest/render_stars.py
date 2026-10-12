@@ -62,5 +62,7 @@ class RenderStars:
             **self.render_args,
         )
         # pynbody puts the lowest y in the first row; flip to the usual top-down image layout.
-        record[self.column] = np.asarray(image[::-1], dtype=np.float32)
+        image = np.asarray(image[::-1], dtype=np.float32)
+        # Channels first: (3, height, width).
+        record[self.column] = np.moveaxis(image, -1, 0)
         return record
