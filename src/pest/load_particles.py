@@ -9,7 +9,7 @@ class LoadParticles:
     Args:
         fields (list[str]): Particle fields to load, e.g. `["pos", "vel", "mass"]`.
         component (str): Particle family: "stars", "gas" or "dm".
-        prefix (str): Prefix for the added column names, e.g. "gas_" to load
+        prefix (str): Prefix for the added column names, e.g. `"gas_"` to load
             several components into one record.
     """
 

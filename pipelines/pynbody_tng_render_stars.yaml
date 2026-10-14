@@ -1,0 +1,53 @@
+num_workers: 16
+shuffle: True
+seed: 42
+
+extract:
+  class_path: pest.PynbodyDataset
+  init_args:
+    snapshot_path: tests/data/illustris_tng/TNG50-1/snapdir_099/snap_099
+    columns:
+      - subhalo_id
+      - snapshot
+      - SubhaloSFR
+
+transform:
+  - class_path: pest.FilterRange
+    # Only render subhalos flagged galaxies
+    init_args:
+      column: SubhaloFlag
+      min: 1
+  - class_path: pest.FilterRange
+    # RenderStars can only handle galaxies with at least 32 star particles
+    init_args:
+      column: SubhaloLenType
+      index: 4
+      min: 10000
+  - class_path: pest.RenderStars
+    init_args:
+      width: 50 # [kpc]
+      resolution: 256
+  - column: image
+    transformations:
+      - class_path: pest.ResizeImage
+        init_args:
+          size: [128, 128]
+      - class_path: pest.FilterTruncatedGalaxies
+        init_args:
+          threshold: 0.4
+      - class_path: pest.AlignImageHorizontally
+      - class_path: pest.Crop
+        init_args:
+          relative_size: 0.5
+      - class_path: pest.ResizeImage
+        init_args:
+          size: [128, 128]
+      - class_path: pest.ReflectionalInvariance
+      - class_path: pest.MinMaxNormalize
+        init_args:
+          feature_range: [0, 1]
+
+load:
+  - class_path: pest.ParquetWriter
+    init_args:
+      output_path: output/pynbody_tng_render.parquet

@@ -5,7 +5,7 @@ seed: 42
 extract:
   class_path: pest.PynbodyDataset
   init_args:
-    snapshot_path: /urz/gpuscratch/its/data/Illustris/TNG50-1/snapdir_099/snap_099
+    snapshot_path: tests/data/illustris_tng/TNG50-1/snapdir_099/snap_099
     columns:
       - subhalo_id
       - snapshot
