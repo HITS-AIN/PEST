@@ -1,10 +1,12 @@
 """Compare reading the stars of TNG subhalos directly with loading them with pynbody.
 
-`PynbodyDataset.stars` reads the star particles of a subhalo directly from the
-snapshot files, instead of loading the whole subhalo with pynbody
+`PynbodyDataset.stars` and `PynbodyDataset.particles` (used by RenderStars and
+LoadParticles) read the particles of a subhalo directly from the snapshot
+files, instead of loading the whole subhalo with pynbody
 (`PynbodyDataset.halo`). For a few subhalos in a stellar mass range, this times
-both, renders both sets of stars centered on the catalogue center, and prints
-the largest difference of the images, which should be at float precision.
+both ways. It renders both sets of stars centered on the catalogue center and
+prints the largest difference of the images, which should be at float
+precision, and checks that both give the same star particles.
 
 It also compares RenderStars with how it rendered before: the whole subhalo
 loaded with pynbody and centered on all its particles, including velocities.
@@ -64,20 +66,27 @@ def main():
     if len(subhalo_ids) == 0:
         raise SystemExit("No subhalos in the stellar mass range.")
     _, seconds = timed(dataset.stars, subhalo_ids[0])
-    if not dataset.direct_star_loading:
+    if dataset._direct_groups.get(pynbody.family.star) is None:
         raise SystemExit("The stars of this snapshot cannot be read directly.")
     print(f"First call of stars(), including the setup: {seconds:.2f}s")
     step = RenderStars(width=args.width, resolution=args.resolution, center_mode=args.center_mode)
     step.bind(dataset)
+    fields = ["pos", "vel", "mass"]
 
     for subhalo_id in subhalo_ids:
         stars, t_stars = timed(dataset.stars, subhalo_id)
-        dataset.direct_star_loading = False
+        particles, t_particles = timed(dataset.particles, subhalo_id, "stars", fields)
+        dataset.direct_loading = False
         loaded, t_halo = timed(dataset.stars, subhalo_id)
-        dataset.direct_star_loading = True
+        loaded_particles, t_halo_particles = timed(dataset.particles, subhalo_id, "stars", fields)
+        dataset.direct_loading = True
         loading_diff = np.abs(render(stars, args) - render(loaded, args)).max()
+        same = all(np.array_equal(particles[field], loaded_particles[field]) for field in fields)
         print(f"\nSubhalo {subhalo_id} ({len(stars)} stars)")
-        print(f"  load:   halo() {t_halo:.2f}s, stars() {t_stars:.2f}s, largest image difference {loading_diff:.1e}")
+        print(
+            f"  stars():     halo() {t_halo:.2f}s, direct {t_stars:.2f}s, largest image difference {loading_diff:.1e}"
+        )
+        print(f"  particles(): halo() {t_halo_particles:.2f}s, direct {t_particles:.2f}s, same {fields}: {same}")
 
         (halo, before), t_before = timed(render_before, dataset, subhalo_id, args)
         record, t_after = timed(step, {"subhalo_id": subhalo_id})
@@ -89,7 +98,7 @@ def main():
         shift = np.linalg.norm(old_center - np.asarray(new_center))
         render_diff = np.abs(record["image"] - before).max()
         print(
-            f"  render: before {t_before:.2f}s, after {t_after:.2f}s, "
+            f"  render:      before {t_before:.2f}s, after {t_after:.2f}s, "
             f"center shift {shift:.2f} kpc, largest image difference {render_diff:.1e}"
         )
 

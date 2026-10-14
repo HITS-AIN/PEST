@@ -186,7 +186,6 @@ def test_stars_from_halo(fake_pynbody):
 
     stars = dataset.stars(np.int32(3))
     # Not an IllustrisTNG-like snapshot, so the stars come from the halo loaded by pynbody.
-    assert dataset.direct_star_loading is False
     assert fake_pynbody.fake_halos.accessed == [3]
     assert len(stars) == 4
     np.testing.assert_allclose(stars["pos"], 1.0)
@@ -370,8 +369,7 @@ def test_tng_stars_direct_matches_halo(subhalo_id):
     assert len(dataset.snapshot._hdf_files) == 2
 
     direct = dataset.stars(subhalo_id)
-    assert dataset.direct_star_loading
-    dataset.direct_star_loading = False
+    dataset.direct_loading = False
     loaded = dataset.stars(subhalo_id)
 
     assert len(direct) == len(loaded)
@@ -418,7 +416,7 @@ def test_tng_render_stars_direct_matches_halo(center_mode):
     step.bind(dataset)
 
     direct = step({"subhalo_id": 0})["image"]
-    dataset.direct_star_loading = False
+    dataset.direct_loading = False
     loaded = step({"subhalo_id": 0})["image"]
     np.testing.assert_allclose(direct, loaded, atol=1e-6)
 
@@ -433,3 +431,48 @@ def test_tng_render_stars_rho_placeholder():
     # The same stars, rendered with the SPH density computed by pynbody.
     expected = pynbody.plot.stars.render(dataset.stars(0), width=20, resolution=16, noplot=True, return_image=True)
     np.testing.assert_allclose(image, np.moveaxis(expected[::-1], -1, 0), atol=1e-6)
+
+
+@pytest.mark.filterwarnings("ignore")
+@pytest.mark.parametrize(
+    "component, fields",
+    [
+        ("stars", ["pos", "vel", "mass", "metals", "aform"]),
+        ("gas", ["pos", "vel", "mass", "metals"]),
+        ("dm", ["pos", "vel", "mass", "iord"]),
+    ],
+)
+@pytest.mark.parametrize("subhalo_id", range(5))
+def test_tng_particles_direct_matches_halo(component, fields, subhalo_id):
+    dataset = PynbodyDataset(TNG_SNAPSHOT)
+
+    direct = dataset.particles(subhalo_id, component, fields)
+    dataset.direct_loading = False
+    loaded = dataset.particles(subhalo_id, component, fields)
+
+    for field in fields:
+        np.testing.assert_array_equal(direct[field], loaded[field])
+
+
+@pytest.mark.filterwarnings("ignore")
+def test_tng_particles_read_directly(monkeypatch):
+    dataset = PynbodyDataset(TNG_SNAPSHOT)
+    monkeypatch.setattr(dataset, "halo", lambda subhalo_id: pytest.fail("particles loaded with pynbody"))
+
+    # Dark matter masses are only stored in the header of the snapshot files.
+    particles = dataset.particles(0, "dm", ["pos", "vel", "mass"])
+    assert particles["pos"].shape == (40, 3)
+    assert np.all(particles["mass"] > 0)
+
+
+@pytest.mark.filterwarnings("ignore")
+def test_tng_particles_derived_field(monkeypatch):
+    dataset = PynbodyDataset(TNG_SNAPSHOT)
+    loaded = []
+    halo = dataset.halo
+    monkeypatch.setattr(dataset, "halo", lambda subhalo_id: loaded.append(subhalo_id) or halo(subhalo_id))
+
+    # Ages are derived by pynbody, not stored in the snapshot files.
+    ages = dataset.particles(0, "stars", ["mass", "age"])["age"]
+    assert loaded == [0]
+    assert np.isnan(ages).sum() == 3  # the wind particles

@@ -15,14 +15,8 @@ DEFAULT_COLUMNS = ["subhalo_id"]
 PARTICLE_FIELDS = {"pos", "vel", "mass"}
 # Catalogue properties holding the (position, velocity) of the subhalo center, per catalogue format.
 CENTER_PROPERTIES = [("SubhaloPos", "SubhaloVel"), ("sub_pos", "sub_vel")]
-# Star arrays that `stars()` reads directly from IllustrisTNG-like snapshots:
-# pynbody name -> (dataset of the PartType4 group, units to convert to).
-STAR_DATASETS = {
-    "pos": ("Coordinates", "kpc"),
-    "mass": ("Masses", "Msol"),
-    "aform": ("GFM_StellarFormationTime", None),
-    "metals": ("GFM_Metallicity", None),
-}
+# Star arrays that `stars()` provides for rendering.
+STAR_ARRAYS = ["pos", "mass", "aform", "metals"]
 
 
 class PynbodyDataset:
@@ -86,9 +80,9 @@ class PynbodyDataset:
         )
         # Formats without partial loading (e.g. Gadget binary, Ramses) fall back to copying out of the snapshot.
         self.partial_loading = True
-        # Set up on the first call of `stars()`, if the stars can be read directly from the snapshot files.
-        self.direct_star_loading = True
-        self._star_files = None
+        # Particles of IllustrisTNG-like snapshots are read directly from the snapshot files, see `_read_particles()`.
+        self.direct_loading = True
+        self._direct_groups: dict = {}
 
         name = Path(snapshot_path).name
         match = re.search(r"snap(?:shot)?_(\d+)", name) or re.search(r"(\d+)$", name.removesuffix(".hdf5"))
@@ -148,14 +142,19 @@ class PynbodyDataset:
         "pos" and "vel" are returned relative to the subhalo center in kpc and
         km/s, any other particle field (e.g. "mass") as a float32 array. The
         center is taken from the catalogue, or computed with
-        `pynbody.analysis.center` if the catalogue has none.
+        `pynbody.analysis.center` if the catalogue has none. Fields stored in
+        IllustrisTNG-like snapshots are read directly from the snapshot files
+        (see `_read_particles()`), others from the subhalo loaded with `halo()`.
         """
         if component not in COMPONENTS:
             raise ValueError(f"component must be one of {list(COMPONENTS)}, got {component!r}")
-        halo = self.halo(subhalo_id)
-        if self.center_properties is None:
-            pynbody.analysis.center(halo)
-        particles = getattr(halo, COMPONENTS[component])
+        family = pynbody.family.get_family(COMPONENTS[component])
+        particles = self._read_particles(int(subhalo_id), family, fields)
+        if particles is None:
+            halo = self.halo(subhalo_id)
+            if self.center_properties is None:
+                pynbody.analysis.center(halo)
+            particles = getattr(halo, COMPONENTS[component])
         return {field: self._particle_field(particles, field, subhalo_id) for field in fields}
 
     def stars(self, subhalo_id: int | np.integer):
@@ -163,80 +162,104 @@ class PynbodyDataset:
 
         Positions are in kpc relative to the subhalo center, which is taken from
         the catalogue (wrapped at the periodic box boundary), or computed with
-        `pynbody.analysis.center` if the catalogue has none.
-
-        IllustrisTNG-like snapshots (Arepo HDF5 with a SUBFIND catalogue) store
-        the stars of a subhalo contiguously, so only the arrays needed for
-        rendering ("pos", "mass", "aform", "metals") are read from the snapshot
-        files, which is much faster than `halo()`. Wind particles, which TNG
+        `pynbody.analysis.center` if the catalogue has none. For IllustrisTNG-like
+        snapshots, only the arrays needed for rendering ("pos", "mass", "aform",
+        "metals") are read (see `_read_particles()`). Wind particles, which TNG
         stores with the stars, are kept as pynbody keeps them: they have no age
         and emit no light. Other formats use the stars of `halo()`.
         """
         subhalo_id = int(subhalo_id)
-        if self.direct_star_loading and self._star_files is None:
-            self._star_files = self._find_star_files()
-            self.direct_star_loading = self._star_files is not None
-        if self.direct_star_loading:
-            return self._read_stars(subhalo_id)
-
-        halo = self.halo(subhalo_id)
-        stars = halo.st
+        stars = self._read_particles(subhalo_id, pynbody.family.star, STAR_ARRAYS)
+        if stars is None:
+            stars = self.halo(subhalo_id).st
         if self.center_properties is not None:
             stars["pos"] = self._relative_to_center(stars["pos"], "pos", subhalo_id)
         elif len(stars):
             pynbody.analysis.center(stars, with_velocity=False, cen_num_particles=0, move_all=False)
         return stars
 
-    def _find_star_files(self) -> tuple[list, np.ndarray] | None:
-        """The PartType4 groups of the snapshot files and the index of their first star, if `stars()` can read them."""
+    def _read_particles(self, subhalo_id: int, family, names: list[str]):
+        """Arrays `names` of the `family` particles of one subhalo, read directly from the snapshot files.
+
+        IllustrisTNG-like snapshots (Arepo HDF5 with a SUBFIND catalogue) store
+        the particles of a subhalo contiguously, so only these arrays of the
+        subhalo are read, much faster than loading it with `halo()`. Returns a
+        pynbody snapshot in physical units, or None if the arrays cannot be read
+        directly, e.g. ones that pynbody derives.
+        """
+        if not self.direct_loading:
+            return None
+        if family not in self._direct_groups:
+            self._direct_groups[family] = self._find_groups(family)
+        if self._direct_groups[family] is None:
+            return None
+        ptype, groups, starts = self._direct_groups[family]
+        index = self.halos.number_mapper.number_to_index(subhalo_id)
+        start = int(self.halos._subfind_halo_offsets[ptype][index])
+        stop = start + int(self.halos._subfind_halo_lengths[ptype][index])
+        # The particles of a subhalo are contiguous, but may be spread over several files.
+        parts = [
+            (group, slice(max(start, first) - first, min(stop, end) - first))
+            for group, first, end in zip(groups, starts[:-1], starts[1:])
+            if first < stop and start < end
+        ] or [(groups[0], slice(0, 0))]
+        arrays = {name: self._read_array(parts, name) for name in names}
+        if any(values is None for values in arrays.values()):
+            return None
+
+        particles = pynbody.new(**{family.name: stop - start})
+        # The box size is left out, as positions get wrapped around the subhalo center: with it, pynbody would
+        # treat them as periodic, e.g. the renderer would draw periodic copies.
+        particles.properties.update({key: value for key, value in self.snapshot.properties.items() if key != "boxsize"})
+        for name, values in arrays.items():
+            # new() creates "pos", "vel" and "mass" as float64, while pynbody's loader keeps the dtypes of the files.
+            if name in particles:
+                del particles[name]
+            particles[name] = values
+        particles.physical_units()
+        return particles
+
+    def _find_groups(self, family) -> tuple[str, list, np.ndarray] | None:
+        """The HDF5 particle type of `family`, its groups in the snapshot files and the index of their first
+        particle, if `_read_particles()` can read them."""
         snapshot, halos = self.snapshot, self.halos
         if not (
             isinstance(snapshot, ArepoHDFSnap)
             and self.center_properties is not None
             # FoF group catalogues have subhalo offsets as well, but are indexed by group.
             and getattr(halos, "_sub_mode", False)
-            and "PartType4" in getattr(halos, "_subfind_halo_offsets", {})
-            and snapshot._family_to_group_map.get(pynbody.family.star) == ["PartType4"]
         ):
+            return None
+        ptypes = snapshot._family_to_group_map.get(family, [])
+        if len(ptypes) != 1 or ptypes[0] not in getattr(halos, "_subfind_halo_offsets", {}):
             return None
         # pynbody keeps the snapshot files open and counts their particles like this.
-        groups = list(snapshot._hdf_files.iter_particle_groups_with_name("PartType4"))
-        if not groups or any(
-            dataset not in groups[0] or "length_scaling" not in groups[0][dataset].attrs
-            for dataset, _ in STAR_DATASETS.values()
-        ):
+        groups = list(snapshot._hdf_files.iter_particle_groups_with_name(ptypes[0]))
+        if not groups:
             return None
         starts = np.cumsum([0] + [group["ParticleIDs"].shape[0] for group in groups])
-        return groups, starts
+        return ptypes[0], groups, starts
 
-    def _read_stars(self, subhalo_id: int):
-        """The star particles of one subhalo, read directly from the snapshot files (see `stars()`)."""
-        groups, starts = self._star_files
-        index = self.halos.number_mapper.number_to_index(subhalo_id)
-        start = int(self.halos._subfind_halo_offsets["PartType4"][index])
-        stop = start + int(self.halos._subfind_halo_lengths["PartType4"][index])
-        # The stars of a subhalo are contiguous, but may be spread over several files.
-        parts = [
-            (group, slice(max(start, first) - first, min(stop, end) - first))
-            for group, first, end in zip(groups, starts[:-1], starts[1:])
-            if first < stop and start < end
-        ] or [(groups[0], slice(0, 0))]
-
-        stars = pynbody.new(star=stop - start)
-        # new() creates float64 arrays, while pynbody's loader keeps masses in the dtype of the coordinates.
-        del stars["pos"], stars["mass"]
-        coordinates_dtype = groups[0]["Coordinates"].dtype
-        context = self.snapshot.conversion_context()
-        for name, (dataset, units) in STAR_DATASETS.items():
+    def _read_array(self, parts: list, name: str) -> SimArray | None:
+        """The pynbody array `name` of slices of particle groups, if it can be read from the snapshot files."""
+        first = parts[0][0]
+        dataset = next((dataset for dataset in self.snapshot._translate_array_name(name) if dataset in first), None)
+        if dataset is not None and "length_scaling" in first[dataset].attrs:
             data = np.concatenate([group[dataset][part] for group, part in parts])
-            if name == "mass":
-                data = data.astype(coordinates_dtype)
-            values = SimArray(data, self.snapshot._get_units_from_hdf_attr(groups[0][dataset].attrs))
-            stars[name] = values if units is None else values.in_units(units, **context)
-        stars["pos"] = SimArray(self._relative_to_center(stars["pos"], "pos", subhalo_id), "kpc")
-        # Without the box size, the renderer draws no periodic copies of the stars, which are wrapped already.
-        stars.properties.update({key: value for key, value in self.snapshot.properties.items() if key != "boxsize"})
-        return stars
+            units = self.snapshot._get_units_from_hdf_attr(first[dataset].attrs)
+        elif dataset is None and name == "mass":
+            # Masses that are the same for all particles of a type are only stored in the header.
+            masses = [group.file["Header"].attrs["MassTable"][int(group.name[-1])] for group, _ in parts]
+            if min(masses) <= 0:
+                return None
+            data = np.concatenate([np.full(part.stop - part.start, mass) for (_, part), mass in zip(parts, masses)])
+            units = self.snapshot.infer_original_units("Msol")
+        else:
+            return None
+        if name == "mass":
+            # pynbody keeps masses in the dtype of the coordinates.
+            data = data.astype(first["Coordinates"].dtype)
+        return SimArray(data, units)
 
     def _particle_field(self, particles, field: str, subhalo_id: int) -> np.ndarray:
         values = particles[field]

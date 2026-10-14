@@ -53,10 +53,10 @@ velocities are relative to the catalogue center (`SubhaloPos`/`SubhaloVel` or
 `sub_pos`/`sub_vel`, wrapped at the periodic box boundary), or to the center computed by
 `pynbody.analysis.center` if the catalogue has none.
 
-For `RenderStars`, the star particles of IllustrisTNG-like snapshots (Arepo HDF5 with a
-SUBFIND catalogue) are read directly from the snapshot files: only the positions, masses,
-formation times and metallicities needed for rendering, without reopening the whole
-snapshot for every subhalo.
+For IllustrisTNG-like snapshots (Arepo HDF5 with a SUBFIND catalogue), `LoadParticles` and
+`RenderStars` read only the arrays they need directly from the snapshot files, without
+reopening the whole snapshot for every subhalo. Arrays that pynbody derives instead of
+reading them (e.g. `age`) are still loaded with pynbody.
 
 #### `IllustrisSkirtDataset` columns
 
