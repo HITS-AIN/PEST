@@ -2,7 +2,7 @@
 
 Synthetic exponential-disk galaxies are built in memory with `pynbody.new`, so
 no snapshot on disk is needed. Every render gets a freshly built snapshot (as
-`PynbodyDataset.halo` returns a standalone copy), so cached arrays such as the
+`PynbodyDataset.stars` returns a new snapshot), so cached arrays such as the
 smoothing lengths are not reused. Building the snapshot is not timed.
 
 Run `uv run python benchmarks/render_stars.py --help` for the options.
@@ -26,8 +26,9 @@ def make_galaxy(n_stars: int, seed: int = 0):
     r = rng.exponential(3.0, n_stars)  # [kpc]
     phi = rng.uniform(0, 2 * np.pi, n_stars)
     z = rng.normal(0, 0.3, n_stars)
-    # Offset from the origin, so that the centering has to do some work.
-    sim.s["pos"] = np.c_[r * np.cos(phi), r * np.sin(phi), z] + 5000.0
+    # Offset from the origin, like a catalogue center off the stellar density peak, so that the centering has
+    # some work to do.
+    sim.s["pos"] = np.c_[r * np.cos(phi), r * np.sin(phi), z] + 0.5
     sim.s["pos"].units = "kpc"
     v_circ = 200.0 * (1 - np.exp(-r / 2.0))  # [km/s]
     sim.s["vel"] = np.c_[-v_circ * np.sin(phi), v_circ * np.cos(phi), rng.normal(0, 20, n_stars)]
@@ -49,7 +50,7 @@ class PrebuiltDataset:
     def __init__(self):
         self.snapshot = None
 
-    def halo(self, subhalo_id):
+    def stars(self, subhalo_id):
         return self.snapshot
 
 
@@ -74,8 +75,12 @@ def main():
     parser.add_argument("--repeat", type=int, default=3, help="timed runs per size, after one warm-up run")
     parser.add_argument("--resolution", type=int, default=256)
     parser.add_argument("--width", type=float, default=50.0, help="image width [kpc]")
-    parser.add_argument("--center-mode", default="ssc")
+    parser.add_argument("--center-mode", default="ssc", help='"ssc", "com", "hyb" or "catalogue"')
+    parser.add_argument("--threads", type=int, help="pynbody threads (default: one per CPU)")
     args = parser.parse_args()
+
+    if args.threads is not None:
+        pynbody.config["number_of_threads"] = args.threads
 
     dataset = PrebuiltDataset()
     step = RenderStars(width=args.width, resolution=args.resolution, center_mode=args.center_mode)

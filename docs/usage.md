@@ -53,6 +53,11 @@ velocities are relative to the catalogue center (`SubhaloPos`/`SubhaloVel` or
 `sub_pos`/`sub_vel`, wrapped at the periodic box boundary), or to the center computed by
 `pynbody.analysis.center` if the catalogue has none.
 
+For `RenderStars`, the star particles of IllustrisTNG-like snapshots (Arepo HDF5 with a
+SUBFIND catalogue) are read directly from the snapshot files: only the positions, masses,
+formation times and metallicities needed for rendering, without reopening the whole
+snapshot for every subhalo.
+
 #### `IllustrisSkirtDataset` columns
 
 The `columns` argument accepts plain string columns — `image`, `simulation`, `snapshot`,
@@ -111,6 +116,7 @@ transform:
 |---|---|
 | `FilterRange` | Keep records whose `column` (optionally `[..., index]`, converted to `units`) lies within `[min, max]` |
 | `LoadParticles` | Add particle arrays (`pos`, `vel` relative to the subhalo center, `mass`, ...) of a `component` from a `PynbodyDataset` |
+| `RenderStars` | Add a 3-color stellar image of a subhalo from a `PynbodyDataset`, rendered with pynbody. The center is refined on the stars (`center_mode`: `ssc` by default, `com`, `hyb`), or `catalogue` keeps the catalogue center |
 | `CreateNormalizedRGBColors` | Combine multi-channel FITS data into an RGB image |
 | `FilterUnhealthyData` | Drop corrupt or blank images |
 | `AlignImageHorizontally` | Rotate galaxy to a canonical orientation |
@@ -136,9 +142,10 @@ receives the same (in-memory, already-transformed) records.
 ### Configuration reference
 
 ```yaml
-num_workers: 4       # parallel workers
-batch_size: 16       # records handed to each worker per chunk
-shuffle: true        # shuffle before transformations
+num_workers: 4          # parallel workers
+threads_per_worker: 1   # threads of each worker, e.g. for pynbody (default: CPUs / num_workers)
+batch_size: 16          # records handed to each worker per chunk
+shuffle: true           # shuffle before transformations
 seed: 42
 
 extract:

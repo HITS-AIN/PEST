@@ -7,6 +7,7 @@ import subprocess
 import time
 
 import numpy as np
+import pynbody
 import yaml
 
 
@@ -43,6 +44,13 @@ def print_header() -> None:
     print("=" * width)
     print(f"  {title}")
     print("=" * width)
+
+
+def _available_cpus() -> int:
+    """Number of CPUs this process may run on, e.g. as allocated by Slurm."""
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
 
 
 def _instantiate(class_path: str, init_args: dict):
@@ -130,11 +138,16 @@ def _prefilter(
 _worker_state: dict = {}
 
 
-def _init_worker(extract_cfg: dict, transform_cfgs: list[dict], start_step: int = 0) -> None:
+def _init_worker(
+    extract_cfg: dict, transform_cfgs: list[dict], start_step: int = 0, threads_per_worker: int | None = None
+) -> None:
     """Pool initializer: build one dataset instance and one transform chain per worker.
 
     The first `start_step` steps were already applied by `_prefilter` and are skipped.
     """
+    if threads_per_worker is not None:
+        # pynbody defaults to one thread per CPU of the node in every worker.
+        pynbody.config["number_of_threads"] = threads_per_worker
     dataset = _instantiate(extract_cfg["class_path"], extract_cfg.get("init_args", {}))
     steps = _build_steps(transform_cfgs)[start_step:]
     for step in steps:
@@ -191,6 +204,13 @@ class Pipeline:
         self.batch_size = config.get("batch_size", 16)
         self.shuffle = config.get("shuffle", True)
         self.seed = config.get("seed", 42)
+        # By default, the workers share the available CPUs.
+        threads_per_worker = config.get("threads_per_worker")
+        if threads_per_worker is None:
+            threads_per_worker = max(1, _available_cpus() // max(1, self.num_workers))
+        if threads_per_worker < 1:
+            raise ValueError(f"threads_per_worker must be at least 1, got {threads_per_worker}")
+        self.threads_per_worker = threads_per_worker
 
     def run(self) -> None:
         """Run the pipeline: extract, transform, and load data.
@@ -229,17 +249,20 @@ class Pipeline:
         if self.shuffle:
             np.random.default_rng(self.seed).shuffle(indices)
 
-        print(f"Extract+Transform: processing {len(indices)} records with {self.num_workers} worker(s)")
+        print(
+            f"Extract+Transform: processing {len(indices)} records with {self.num_workers} worker(s), "
+            f"{self.threads_per_worker} thread(s) each"
+        )
         transform_start = time.perf_counter()
         if self.num_workers > 1:
             with multiprocessing.Pool(
                 self.num_workers,
                 initializer=_init_worker,
-                initargs=(extract_cfg, transform_cfgs, start_step),
+                initargs=(extract_cfg, transform_cfgs, start_step, self.threads_per_worker),
             ) as pool:
                 results = list(pool.imap(_process_record, indices, chunksize=max(1, self.batch_size)))
         else:
-            _init_worker(extract_cfg, transform_cfgs, start_step)
+            _init_worker(extract_cfg, transform_cfgs, start_step, self.threads_per_worker)
             results = [_process_record(i) for i in indices]
 
         records = []

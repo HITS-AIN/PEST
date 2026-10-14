@@ -3,7 +3,7 @@
 The files follow the layout and format of the TNG data release, so that pynbody
 reads them with ArepoHDFSnap and TNGSubfindHDFCatalogue:
 
-    tests/data/illustris_tng/TNG50-1/snapdir_099/snap_099.0.hdf5
+    tests/data/illustris_tng/TNG50-1/snapdir_099/snap_099.{0,1}.hdf5
     tests/data/illustris_tng/TNG50-1/groups_099/fof_subhalo_tab_099.0.hdf5
 
 Contents (code units: ckpc/h, 1e10 Msun/h, km/s * sqrt(a)):
@@ -11,11 +11,14 @@ Contents (code units: ckpc/h, 1e10 Msun/h, km/s * sqrt(a)):
 - 2 FoF groups with 5 subhalos: group 0 holds subhalos 0, 1, 2, group 1 holds 3, 4.
 - Gas (PartType0), dark matter (PartType1, mass from the MassTable) and stars (PartType4).
 - Subhalo 0 has 64 star particles, enough for pynbody's SPH smoothing (32 neighbours) in RenderStars.
+  3 of them are wind particles, with a negative GFM_StellarFormationTime as in TNG.
 - Subhalo 2 is dark (no gas, no stars).
 - Subhalo 3 crosses the periodic box boundary in x.
 - Subhalo 4 has SubhaloFlag = 0.
 - Particles are ordered by group and subhalo, followed by the group fuzz and the
   particles outside of any group, as in the TNG snapshots.
+- The snapshot is split into 2 files with half of the particles of each type, so
+  the stars of subhalo 0 are spread over both files.
 
 Run `python tests/make_illustris_tng_testdata.py` to regenerate the files.
 """
@@ -28,6 +31,8 @@ import numpy as np
 OUTPUT_PATH = Path(__file__).parent / "data" / "illustris_tng" / "TNG50-1"
 SNAPSHOT = 99
 SEED = 42
+NUM_FILES = 2
+WIND_STARS = [5, 30, 50]  # indices of the wind particles among the star particles, all in subhalo 0
 
 BOXSIZE = 35000.0  # [ckpc/h]
 HUBBLE = 0.6774
@@ -167,63 +172,79 @@ def build(rng):
     return particles, sub_len, group_len
 
 
-def write_snapshot(path: Path, particles, rng) -> None:
-    npart = np.zeros(6, dtype=np.uint32)
+def snapshot_datasets(particles, rng) -> dict:
+    """The snapshot datasets of each particle type with their unit attributes, for all files together."""
+    datasets = {}
+    first_id = 1
     for ptype, fields in particles.items():
-        npart[ptype] = len(fields["pos"])
+        n = len(fields["pos"])
+        data = {
+            "Coordinates": (fields["pos"], POS_UNITS),
+            "Velocities": (fields["vel"], VEL_UNITS),
+            "ParticleIDs": (np.arange(first_id, first_id + n, dtype=np.uint64), NO_UNITS),
+        }
+        first_id += n
+        if ptype != 1:  # dark matter masses are in the MassTable
+            data["Masses"] = (fields["mass"], MASS_UNITS)
+            data["GFM_Metallicity"] = (rng.uniform(0.005, 0.03, n).astype(np.float32), NO_UNITS)
+        if ptype == 4:
+            formation_time = rng.uniform(0.2, 0.99, n).astype(np.float32)
+            formation_time[WIND_STARS] *= -1
+            data["GFM_StellarFormationTime"] = (formation_time, NO_UNITS)
+        datasets[ptype] = data
+    return datasets
+
+
+def write_snapshot(directory: Path, datasets) -> None:
+    """Write the snapshot as NUM_FILES files, each with an equal share of the particles of each type."""
+    npart_total = np.zeros(6, dtype=np.uint32)
+    for ptype, data in datasets.items():
+        npart_total[ptype] = len(data["ParticleIDs"][0])
+    bounds = [npart_total * i // NUM_FILES for i in range(NUM_FILES + 1)]
     mass_table = np.zeros(6)
     mass_table[1] = DM_MASS
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(path, "w") as f:
-        f.create_group("Config").attrs["VORONOI"] = 1
-        header = f.create_group("Header")
-        header.attrs.update(
-            {
-                "BoxSize": BOXSIZE,
-                "HubbleParam": HUBBLE,
-                "MassTable": mass_table,
-                "NumFilesPerSnapshot": 1,
-                "NumPart_ThisFile": npart.astype(np.int32),
-                "NumPart_Total": npart,
-                "NumPart_Total_HighWord": np.zeros(6, dtype=np.uint32),
-                "Omega0": 0.3089,
-                "OmegaBaryon": 0.0486,
-                "OmegaLambda": 0.6911,
-                "Redshift": REDSHIFT,
-                "Time": 1.0 / (1.0 + REDSHIFT),
-                "UnitLength_in_cm": UNIT_LENGTH,
-                "UnitMass_in_g": UNIT_MASS,
-                "UnitVelocity_in_cm_per_s": UNIT_VELOCITY,
-            }
-        )
-        f.create_group("Parameters").attrs.update(
-            {
-                "BoxSize": BOXSIZE,
-                "HubbleParam": HUBBLE,
-                "Omega0": 0.3089,
-                "OmegaBaryon": 0.0486,
-                "OmegaLambda": 0.6911,
-                "UnitLength_in_cm": UNIT_LENGTH,
-                "UnitMass_in_g": UNIT_MASS,
-                "UnitVelocity_in_cm_per_s": UNIT_VELOCITY,
-            }
-        )
+    directory.mkdir(parents=True, exist_ok=True)
+    for i in range(NUM_FILES):
+        with h5py.File(directory / f"snap_{SNAPSHOT:03d}.{i}.hdf5", "w") as f:
+            f.create_group("Config").attrs["VORONOI"] = 1
+            header = f.create_group("Header")
+            header.attrs.update(
+                {
+                    "BoxSize": BOXSIZE,
+                    "HubbleParam": HUBBLE,
+                    "MassTable": mass_table,
+                    "NumFilesPerSnapshot": NUM_FILES,
+                    "NumPart_ThisFile": (bounds[i + 1] - bounds[i]).astype(np.int32),
+                    "NumPart_Total": npart_total,
+                    "NumPart_Total_HighWord": np.zeros(6, dtype=np.uint32),
+                    "Omega0": 0.3089,
+                    "OmegaBaryon": 0.0486,
+                    "OmegaLambda": 0.6911,
+                    "Redshift": REDSHIFT,
+                    "Time": 1.0 / (1.0 + REDSHIFT),
+                    "UnitLength_in_cm": UNIT_LENGTH,
+                    "UnitMass_in_g": UNIT_MASS,
+                    "UnitVelocity_in_cm_per_s": UNIT_VELOCITY,
+                }
+            )
+            f.create_group("Parameters").attrs.update(
+                {
+                    "BoxSize": BOXSIZE,
+                    "HubbleParam": HUBBLE,
+                    "Omega0": 0.3089,
+                    "OmegaBaryon": 0.0486,
+                    "OmegaLambda": 0.6911,
+                    "UnitLength_in_cm": UNIT_LENGTH,
+                    "UnitMass_in_g": UNIT_MASS,
+                    "UnitVelocity_in_cm_per_s": UNIT_VELOCITY,
+                }
+            )
 
-        first_id = 1
-        for ptype, fields in particles.items():
-            group = f.create_group(f"PartType{ptype}")
-            n = len(fields["pos"])
-            write(group, "Coordinates", fields["pos"], POS_UNITS)
-            write(group, "Velocities", fields["vel"], VEL_UNITS)
-            write(group, "ParticleIDs", np.arange(first_id, first_id + n, dtype=np.uint64), NO_UNITS)
-            first_id += n
-            if ptype == 1:
-                continue  # dark matter masses are in the MassTable
-            write(group, "Masses", fields["mass"], MASS_UNITS)
-            write(group, "GFM_Metallicity", rng.uniform(0.005, 0.03, n).astype(np.float32), NO_UNITS)
-            if ptype == 4:
-                write(group, "GFM_StellarFormationTime", rng.uniform(0.2, 0.99, n).astype(np.float32), NO_UNITS)
+            for ptype, data in datasets.items():
+                group = f.create_group(f"PartType{ptype}")
+                for name, (values, attrs) in data.items():
+                    write(group, name, values[bounds[i][ptype] : bounds[i + 1][ptype]], attrs)
 
 
 def write_catalogue(path: Path, particles, sub_len, group_len) -> None:
@@ -295,11 +316,11 @@ def write_catalogue(path: Path, particles, sub_len, group_len) -> None:
 def main() -> None:
     rng = np.random.default_rng(SEED)
     particles, sub_len, group_len = build(rng)
-    snapshot_path = OUTPUT_PATH / f"snapdir_{SNAPSHOT:03d}" / f"snap_{SNAPSHOT:03d}.0.hdf5"
+    snapshot_dir = OUTPUT_PATH / f"snapdir_{SNAPSHOT:03d}"
     catalogue_path = OUTPUT_PATH / f"groups_{SNAPSHOT:03d}" / f"fof_subhalo_tab_{SNAPSHOT:03d}.0.hdf5"
-    write_snapshot(snapshot_path, particles, rng)
+    write_snapshot(snapshot_dir, snapshot_datasets(particles, rng))
     write_catalogue(catalogue_path, particles, sub_len, group_len)
-    print(f"Written {snapshot_path} and {catalogue_path}")
+    print(f"Written {NUM_FILES} snapshot files to {snapshot_dir} and {catalogue_path}")
 
 
 if __name__ == "__main__":

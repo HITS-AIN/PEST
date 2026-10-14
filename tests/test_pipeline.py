@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 
 import pandas as pd
+import pynbody
 import pytest
 import yaml
 
@@ -88,3 +90,26 @@ def test_illustris_skirt_pipeline_3(tmp_path):
     assert df.iloc[0]["simulation"] == "TNG50"
     assert df.iloc[0]["snapshot"] == 95
     assert df.iloc[0]["sersic_n_r"] == pytest.approx(2.070126)
+
+
+def test_threads_per_worker(monkeypatch):
+    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: set(range(16)), raising=False)
+
+    # By default, the workers share the CPUs.
+    assert Pipeline({"num_workers": 4}).threads_per_worker == 4
+    assert Pipeline({"num_workers": 32}).threads_per_worker == 1
+    assert Pipeline({"num_workers": 4, "threads_per_worker": 2}).threads_per_worker == 2
+    with pytest.raises(ValueError):
+        Pipeline({"threads_per_worker": 0})
+
+
+def test_pipeline_sets_pynbody_threads(tmp_path, monkeypatch):
+    monkeypatch.setitem(pynbody.config, "number_of_threads", pynbody.config["number_of_threads"])
+    with open(Path(__file__).parent / "data" / "illustris_skirt_pipeline_2.yaml") as fh:
+        config = yaml.safe_load(fh)
+    config["load"][0]["init_args"]["output_path"] = str(tmp_path / "illustris_skirt.parquet")
+    config["threads_per_worker"] = 3
+
+    Pipeline(config).run()
+
+    assert pynbody.config["number_of_threads"] == 3
