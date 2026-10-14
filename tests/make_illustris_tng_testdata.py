@@ -20,7 +20,9 @@ Contents (code units: ckpc/h, 1e10 Msun/h, km/s * sqrt(a)):
 - The snapshot is split into 2 files with half of the particles of each type, so
   the stars of subhalo 0 are spread over both files.
 
-Run `python tests/make_illustris_tng_testdata.py` to regenerate the files.
+The files are not stored in the repository: tests/conftest.py generates them
+before the tests run. Run `python tests/make_illustris_tng_testdata.py` to
+generate them by hand.
 """
 
 from pathlib import Path
@@ -313,13 +315,19 @@ def write_catalogue(path: Path, particles, sub_len, group_len) -> None:
         write(subhalo, "SubhaloVel", np.array([sub["vel"] for sub in SUBHALOS], dtype=np.float32), VEL_UNITS)
 
 
-def main() -> None:
+def generate() -> tuple[Path, Path]:
+    """Write the snapshot and catalogue files, and return the snapshot directory and the catalogue path."""
     rng = np.random.default_rng(SEED)
     particles, sub_len, group_len = build(rng)
     snapshot_dir = OUTPUT_PATH / f"snapdir_{SNAPSHOT:03d}"
     catalogue_path = OUTPUT_PATH / f"groups_{SNAPSHOT:03d}" / f"fof_subhalo_tab_{SNAPSHOT:03d}.0.hdf5"
     write_snapshot(snapshot_dir, snapshot_datasets(particles, rng))
     write_catalogue(catalogue_path, particles, sub_len, group_len)
+    return snapshot_dir, catalogue_path
+
+
+def main() -> None:
+    snapshot_dir, catalogue_path = generate()
     print(f"Written {NUM_FILES} snapshot files to {snapshot_dir} and {catalogue_path}")
 
 

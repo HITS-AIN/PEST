@@ -67,6 +67,9 @@ source .venv/bin/activate
 uv run --extra dev pytest
 ```
 
+The synthetic IllustrisTNG test data in `tests/data/illustris_tng` is not in the repository:
+`tests/make_illustris_tng_testdata.py` generates it at the start of every test run.
+
 Run a single test file or test:
 
 ```bash
