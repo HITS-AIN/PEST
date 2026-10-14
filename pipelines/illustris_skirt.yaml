@@ -11,7 +11,7 @@ extract:
       - simulation
       - snapshot
       - subhalo_id
-      - sersic_n
+      - [sersic_n, r]
 
 transform:
   - column: image

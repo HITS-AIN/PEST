@@ -27,12 +27,13 @@ dependencies = [
 # Only needed for the optional `pest.HuggingFaceWriter` load step.
 hf = [
     "datasets>=4.0",
-    "huggingface-hub>=0.33",
+    "huggingface-hub>=1.0",
 ]
 dev = [
     "ipykernel>=6.29",
     "ipywidgets>=8.1.8",
     "isort>=8.0.1",
+    "pre-commit>=4.6",
     "pytest>=8.3",
     "ruff>=0.11",
 ]

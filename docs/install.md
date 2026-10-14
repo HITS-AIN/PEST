@@ -67,6 +67,9 @@ source .venv/bin/activate
 uv run --extra dev pytest
 ```
 
+The synthetic IllustrisTNG test data in `tests/data/illustris_tng` is not in the repository:
+`tests/make_illustris_tng_testdata.py` generates it at the start of every test run.
+
 Run a single test file or test:
 
 ```bash
@@ -84,6 +87,24 @@ uv run --extra dev ruff format --check
 ```
 
 Run these before opening a pull request.
+
+### Pre-commit hooks
+
+The same ruff checks can run automatically on every `git commit` via [pre-commit](https://pre-commit.com/), configured in `.pre-commit-config.yaml`. Install the git hook once after cloning:
+
+```bash
+uv run --extra dev pre-commit install
+```
+
+From then on, each `git commit` runs `ruff check` and `ruff format` on the staged files and aborts the commit if a hook fails. `ruff format` reformats files in place, while lint errors from `ruff check` have to be fixed by hand. In both cases, review the changes, `git add` the files again, and re-commit.
+
+The hook only checks staged files, so run it against the whole repository after changing `.pre-commit-config.yaml` or when setting it up for the first time:
+
+```bash
+uv run --extra dev pre-commit run --all-files
+```
+
+To bypass the hook for a single commit (not recommended), use `git commit --no-verify`.
 
 ### Run a pipeline locally
 

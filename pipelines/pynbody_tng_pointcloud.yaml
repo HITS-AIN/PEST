@@ -1,0 +1,39 @@
+num_workers: 16
+shuffle: True
+seed: 42
+
+extract:
+  class_path: pest.PynbodyDataset
+  init_args:
+    snapshot_path: tests/data/illustris_tng/TNG50-1/snapdir_099/snap_099
+    columns:
+      - subhalo_id
+      - snapshot
+      - SubhaloSFR
+
+# Leading filters run vectorized on the halo catalogue before any record is
+# extracted; particle data is only loaded for the surviving subhalos.
+transform:
+  - class_path: pest.FilterRange # stellar mass
+    init_args:
+      column: SubhaloMassType
+      index: 4
+      min: 5.0e+10 # [Msun]
+      max: 5.2e+10 # [Msun]
+      units: Msol
+  - class_path: pest.FilterRange # SubhaloFlag == 1
+    init_args:
+      column: SubhaloFlag
+      min: 1
+  - class_path: pest.LoadParticles
+    init_args:
+      component: stars
+      fields:
+        - pos
+        - vel
+        - mass
+
+load:
+  - class_path: pest.ParquetWriter
+    init_args:
+      output_path: output/pynbody_tng.parquet
