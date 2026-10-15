@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Iterable
 
 import numpy as np
@@ -61,7 +62,13 @@ class ParquetWriter:
             if batch:
                 writer = self._write_batch(writer, batch)
             if writer is None:
-                # No records at all: still produce an (empty) file.
+                # No records at all: still produce an (empty) file, but it has no
+                # columns, so readers such as DuckDB reject it.
+                warnings.warn(
+                    f"No records to write, {self.output_path} will be an empty file without columns. "
+                    "Check whether the filters in the pipeline drop every record.",
+                    stacklevel=2,
+                )
                 pq.write_table(pa.table({}), self.output_path)
         finally:
             if writer is not None:

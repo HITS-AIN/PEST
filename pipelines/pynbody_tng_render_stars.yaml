@@ -1,4 +1,4 @@
-num_workers: 16
+num_workers: 4
 shuffle: True
 seed: 42
 
@@ -22,7 +22,7 @@ transform:
     init_args:
       column: SubhaloLenType
       index: 4
-      min: 10000
+      min: 32
   - class_path: pest.RenderStars
     init_args:
       width: 50 # [kpc]
