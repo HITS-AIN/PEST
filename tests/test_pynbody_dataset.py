@@ -722,3 +722,17 @@ def test_dataset_with_list_of_snapshots(fake_pynbody):
     assert dataset[8] == {"subhalo_id": 3, "snapshot": 98}
     assert len(dataset.table()["SubhaloSFR"]) == 10
     assert dataset.particles(3, "stars", ["pos"])["pos"].shape[1] == 3
+
+
+@pytest.mark.filterwarnings("ignore")
+def test_tng_table_of_list_of_snapshots_in_physical_units():
+    # The catalogue units depend on `a` and `h`, which the concatenated table must resolve per snapshot.
+    # Keep the dataset alive, the arrays only hold a weak reference to their simulation.
+    dataset = PynbodyDataset(TNG_SNAPSHOT)
+    single = dataset.table()
+    table = PynbodyDataset([TNG_SNAPSHOT, TNG_SNAPSHOT]).table()
+    expected = single["SubhaloMassType"].in_units("Msol")
+    np.testing.assert_allclose(table["SubhaloMassType"].in_units("Msol"), np.concatenate([expected, expected]))
+    mask = FilterRange(column="SubhaloMassType", index=4, min=1e9, units="Msol").mask(table)
+    single_mask = FilterRange(column="SubhaloMassType", index=4, min=1e9, units="Msol").mask(single)
+    assert list(mask) == list(single_mask) * 2

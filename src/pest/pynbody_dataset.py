@@ -7,7 +7,7 @@ from pynbody.array import SimArray
 from pynbody.halo.subfindhdf import TNGSubfindHDFCatalogue
 from pynbody.snapshot.gadgethdf import ArepoHDFSnap
 
-from .units import in_units
+from .units import in_units, physical_units
 
 COMPONENTS = {"stars": "st", "gas": "g", "dm": "dm"}
 # pynbody tries the generic Arepo catalogue first, which reads the wrong multi-file header for TNG, and does not
@@ -405,6 +405,10 @@ class MultiSnapshotDataset(PynbodyDataset):
 
     @staticmethod
     def _concatenate(arrays: list):
+        # The concatenated array belongs to no simulation, so units depending on the scale factor `a` or on `h`
+        # could not be converted any more, and `a` differs between the snapshots. Each array is converted to
+        # physical units with the cosmology of its own snapshot first.
+        arrays = [physical_units(array) for array in arrays]
         units = getattr(arrays[0], "units", None)
         if units is None or type(units).__name__ == "NoUnit" or not hasattr(arrays[0], "in_units"):
             return np.concatenate([np.asarray(array) for array in arrays])
