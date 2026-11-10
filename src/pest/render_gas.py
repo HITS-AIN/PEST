@@ -1,10 +1,10 @@
 import numpy as np
 import pynbody
 
-from .render_stars import center_and_orient, check_center_and_orientation, render_or_drop
+from .render_particles import RenderParticles
 
 
-class RenderGas:
+class RenderGas(RenderParticles):
     """Filter step that adds a gas image of a subhalo to the record.
 
     The pipeline binds the worker's dataset to this step, which must provide
@@ -58,7 +58,7 @@ class RenderGas:
             (32), which fails with fewer particles.
     """
 
-    is_filter = True
+    component = "gas"
 
     def __init__(
         self,
@@ -74,44 +74,18 @@ class RenderGas:
         render_args: dict | None = None,
         min_particles: int = 32,
     ):
-        check_center_and_orientation(center_mode, orientation)
-        self.width = width
-        self.resolution = resolution
-        self.center_mode = center_mode
-        self.orientation = orientation
-        self.disk_size = disk_size
+        super().__init__(width, resolution, center_mode, orientation, disk_size, column, render_args, min_particles)
         self.qty = qty
         self.units = units
         self.log = log
-        self.column = column
-        self.render_args = render_args or {}
         # Arrays besides the default ones of `gas()` that the renderer reads.
         self.arrays = [name for name in (qty, self.render_args.get("weight")) if isinstance(name, str)]
-        self.min_particles = min_particles
-        self.dataset = None
 
-    def bind(self, dataset) -> None:
-        if not hasattr(dataset, "gas"):
-            raise TypeError(f"{type(dataset).__name__} does not provide gas particles.")
-        self.dataset = dataset
+    def _particles(self, subhalo_id):
+        return self.dataset.gas(subhalo_id, velocities=self.orientation is not None, arrays=self.arrays)
 
-    def __call__(self, record: dict) -> dict | None:
-        if self.dataset is None:
-            raise RuntimeError("RenderGas must be bound to a dataset before use.")
-        if "subhalo_id" not in record:
-            raise KeyError("RenderGas requires the 'subhalo_id' column in the extracted records.")
-        subhalo_id = record["subhalo_id"]
-        gas = self.dataset.gas(subhalo_id, velocities=self.orientation is not None, arrays=self.arrays)
-        image = render_or_drop(self._render, gas, self.min_particles, subhalo_id, "gas")
-        if image is None:
-            return None
-        record[self.column] = image
-        return record
-
-    def _render(self, gas) -> np.ndarray | None:
-        """The image of `gas`, or None if it cannot be oriented or has no positive pixel to take the log of."""
-        if not center_and_orient(gas, self.center_mode, self.orientation, self.disk_size):
-            return None
+    def _image(self, gas) -> np.ndarray | None:
+        """The image of `gas`, or None if it has no positive pixel to take the log of."""
         image = pynbody.plot.image(
             gas,
             qty=self.qty,

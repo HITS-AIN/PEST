@@ -1,70 +1,11 @@
-import warnings
-
 import numpy as np
 import pynbody
 from pynbody.array import SimArray
 
-# pynbody centering schemes that work with the particles of one family alone ("pot" needs the potential, which is
-# not loaded), and "catalogue" to keep the center of the dataset.
-CENTER_MODES = [None, "catalogue", "ssc", "com", "hyb"]
-# pynbody.analysis functions that rotate the galaxy by the angular momentum of its disk.
-ORIENTATIONS = [None, "faceon", "sideon"]
+from .render_particles import RenderParticles
 
 
-def check_center_and_orientation(center_mode: str | None, orientation: str | None) -> None:
-    if center_mode not in CENTER_MODES:
-        raise ValueError(
-            f"center_mode must be one of {CENTER_MODES}, got {center_mode!r}. "
-            "For the potential minimum, use 'catalogue' with SUBFIND catalogues."
-        )
-    if orientation not in ORIENTATIONS:
-        raise ValueError(f"orientation must be one of {ORIENTATIONS}, got {orientation!r}.")
-
-
-def center_and_orient(particles, center_mode: str | None, orientation: str | None, disk_size: float | str) -> bool:
-    """Refine the center of `particles` with `pynbody.analysis.center` and rotate them by their angular momentum.
-
-    `particles` is a private snapshot of one family, so moving and rotating only it is enough. Returns whether
-    they could be oriented, which needs an angular momentum within `disk_size`.
-    """
-    if center_mode != "catalogue":
-        # The velocities are already relative to the subhalo velocity of the dataset, so no velocity center is
-        # needed; cen_num_particles=0 keeps "ssc" from computing one anyway.
-        pynbody.analysis.center(particles, mode=center_mode, with_velocity=False, cen_num_particles=0, move_all=False)
-    if orientation is None:
-        return True
-    # pynbody orients by the angular momentum of the particles within disk_size. Without one, e.g. with no
-    # particle that close to the center, it fails with "Transformation matrix is not orthogonal".
-    inner = particles[pynbody.filt.Sphere(disk_size)]
-    norm = np.linalg.norm(np.asarray(pynbody.analysis.angmom.ang_mom_vec(inner)))
-    if not (np.isfinite(norm) and norm > 0):
-        return False
-    getattr(pynbody.analysis, orientation)(particles, disk_size=disk_size, already_centered=True, move_all=False)
-    return True
-
-
-def render_or_drop(render, particles, min_particles: int, subhalo_id, name: str):
-    """The image `render(particles)` of the `name` particles of a subhalo, or None to drop the subhalo.
-
-    A subhalo is dropped with fewer than `min_particles`, if `render` returns None, or if `render` fails, which
-    is reported with a warning.
-    """
-    # No particles cannot be rendered either: pynbody fails with an obscure KeyError for a missing family, e.g.
-    # the stars in dark matter only runs.
-    if len(particles) < max(min_particles, 1):
-        return None
-    try:
-        return render(particles)
-    # Whatever pynbody fails with for the particles of this subhalo must not abort the run for all the others.
-    except Exception as error:  # noqa: BLE001
-        warnings.warn(
-            f"Subhalo {subhalo_id} is dropped, its {name} could not be rendered: {type(error).__name__}: {error}",
-            stacklevel=2,
-        )
-        return None
-
-
-class RenderStars:
+class RenderStars(RenderParticles):
     """Filter step that adds a 3-color stellar image of a subhalo to the record.
 
     The pipeline binds the worker's dataset to this step, which must provide
@@ -108,7 +49,7 @@ class RenderStars:
             (32), which fails with fewer particles.
     """
 
-    is_filter = True
+    component = "stars"
 
     def __init__(
         self,
@@ -121,41 +62,15 @@ class RenderStars:
         render_args: dict | None = None,
         min_particles: int = 32,
     ):
-        check_center_and_orientation(center_mode, orientation)
-        self.width = width
-        self.resolution = resolution
-        self.center_mode = center_mode
-        self.orientation = orientation
-        self.disk_size = disk_size
-        self.column = column
-        self.render_args = render_args or {}
+        super().__init__(width, resolution, center_mode, orientation, disk_size, column, render_args, min_particles)
         if self.render_args.get("with_dust"):
             raise ValueError("with_dust is not supported: pynbody computes the dust from the gas, which is not loaded.")
-        self.min_particles = min_particles
-        self.dataset = None
 
-    def bind(self, dataset) -> None:
-        if not hasattr(dataset, "stars"):
-            raise TypeError(f"{type(dataset).__name__} does not provide star particles.")
-        self.dataset = dataset
+    def _particles(self, subhalo_id):
+        # Without an orientation, the dataset only has to provide `stars(subhalo_id)`.
+        return self.dataset.stars(subhalo_id, **({"velocities": True} if self.orientation else {}))
 
-    def __call__(self, record: dict) -> dict | None:
-        if self.dataset is None:
-            raise RuntimeError("RenderStars must be bound to a dataset before use.")
-        if "subhalo_id" not in record:
-            raise KeyError("RenderStars requires the 'subhalo_id' column in the extracted records.")
-        subhalo_id = record["subhalo_id"]
-        stars = self.dataset.stars(subhalo_id, **({"velocities": True} if self.orientation else {}))
-        image = render_or_drop(self._render, stars, self.min_particles, subhalo_id, "stars")
-        if image is None:
-            return None
-        record[self.column] = image
-        return record
-
-    def _render(self, stars) -> np.ndarray | None:
-        """The image of `stars`, or None if they cannot be oriented."""
-        if not center_and_orient(stars, self.center_mode, self.orientation, self.disk_size):
-            return None
+    def _image(self, stars) -> np.ndarray:
         # The renderer multiplies the luminosity density, 10**(-0.4 mag) * rho / mass, by mass / rho, so the SPH
         # density cancels out. A placeholder saves computing it, about a third of the time of the smoothing.
         stars["rho"] = SimArray(

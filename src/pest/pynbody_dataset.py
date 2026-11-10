@@ -7,7 +7,7 @@ from pynbody.array import SimArray
 from pynbody.halo.subfindhdf import TNGSubfindHDFCatalogue
 from pynbody.snapshot.gadgethdf import ArepoHDFSnap
 
-from .units import in_units, physical_units
+from .units import has_units, in_units, physical_units
 
 COMPONENTS = {"stars": "st", "gas": "g", "dm": "dm"}
 # pynbody tries the generic Arepo catalogue first, which reads the wrong multi-file header for TNG, and does not
@@ -21,8 +21,6 @@ CENTER_PROPERTIES = [("SubhaloPos", "SubhaloVel"), ("sub_pos", "sub_vel")]
 STAR_ARRAYS = ["pos", "mass", "aform", "metals"]
 # Gas arrays that `gas()` provides for rendering.
 GAS_ARRAYS = ["pos", "mass", "rho"]
-# Additional array for orienting the galaxy by its angular momentum.
-VELOCITY_ARRAYS = ["vel"]
 
 
 class IllustrisSubfindHDFCatalogue(TNGSubfindHDFCatalogue):
@@ -223,15 +221,15 @@ class PynbodyDataset:
         `velocities`, the gas velocities relative to the subhalo center are
         provided as well, e.g. to orient the galaxy by its angular momentum.
         """
-        names = GAS_ARRAYS + [name for name in dict.fromkeys(arrays) if name not in GAS_ARRAYS]
-        return self._component_snapshot(subhalo_id, "gas", names, velocities)
+        return self._component_snapshot(subhalo_id, "gas", [*GAS_ARRAYS, *arrays], velocities)
 
     def _component_snapshot(self, subhalo_id: int | np.integer, component: str, arrays: list[str], velocities: bool):
         """The `component` particles of one subhalo with `arrays`, positioned relative to the subhalo center."""
         subhalo_id = int(subhalo_id)
         family_name = COMPONENTS[component]
-        if velocities:
-            arrays = arrays + [name for name in VELOCITY_ARRAYS if name not in arrays]
+        # Each array once, as the additional ones may repeat the default ones. The velocities are needed to orient
+        # the galaxy by its angular momentum.
+        arrays = list(dict.fromkeys([*arrays, "vel"] if velocities else arrays))
         particles = self._read_particles(subhalo_id, pynbody.family.get_family(family_name), arrays)
         if particles is None:
             particles = getattr(self.halo(subhalo_id), family_name)
@@ -409,9 +407,9 @@ class MultiSnapshotDataset(PynbodyDataset):
         # could not be converted any more, and `a` differs between the snapshots. Each array is converted to
         # physical units with the cosmology of its own snapshot first.
         arrays = [physical_units(array) for array in arrays]
-        units = getattr(arrays[0], "units", None)
-        if units is None or type(units).__name__ == "NoUnit" or not hasattr(arrays[0], "in_units"):
+        if not has_units(arrays[0]):
             return np.concatenate([np.asarray(array) for array in arrays])
+        units = arrays[0].units
         return SimArray(np.concatenate([in_units(array, units) for array in arrays]), units)
 
     def __getitem__(self, index: int) -> dict:

@@ -6,9 +6,13 @@ PHYSICAL_BASIS = ["kpc", "km s^-1", "Msol"]
 COSMOLOGICAL_FACTORS = ["a", "h"]
 
 
-def _has_units(array) -> bool:
-    units = getattr(array, "units", None)
-    return units is not None and type(units).__name__ != "NoUnit"
+def _is_unit(units) -> bool:
+    return units is not None and not isinstance(units, pynbody.units.NoUnit)
+
+
+def has_units(array) -> bool:
+    """Whether `array` carries units that it can be converted from, as a pynbody `SimArray` does."""
+    return _is_unit(getattr(array, "units", None)) and hasattr(array, "in_units")
 
 
 def in_units(array, units) -> np.ndarray:
@@ -17,8 +21,7 @@ def in_units(array, units) -> np.ndarray:
     Arrays without units, or a `units` of `None`, are returned unchanged as numpy arrays,
     so this also works for records that do not come from pynbody.
     """
-    target_is_unit = units is not None and type(units).__name__ != "NoUnit"
-    if _has_units(array) and target_is_unit and hasattr(array, "in_units"):
+    if has_units(array) and _is_unit(units):
         array = array.in_units(units)
     return np.asarray(array)
 
@@ -31,7 +34,7 @@ def physical_units(array):
     snapshots. Arrays without units, or with units that cannot be expressed in
     this basis, are returned unchanged.
     """
-    if not _has_units(array) or not hasattr(array, "in_units"):
+    if not has_units(array):
         return array
     try:
         powers = array.units.dimensional_project(PHYSICAL_BASIS + COSMOLOGICAL_FACTORS)

@@ -14,18 +14,23 @@ STELLAR_MASS = np.array([1e8, 5e9, 2e10, 3e10, 1e12])
 SUBHALO_FLAG = np.array([1, 1, 0, 1, 1])
 
 
-def make_stars(pos, vel, mass, family="star"):
-    """A pynbody snapshot of star particles, or of another `family`."""
-    stars = pynbody.new(**{family: len(mass)})
-    stars["pos"] = pynbody.array.SimArray(pos, "kpc")
-    stars["vel"] = pynbody.array.SimArray(vel, "km s**-1")
-    stars["mass"] = pynbody.array.SimArray(mass, "Msol")
-    return stars
+def make_particles(family, pos, vel, mass):
+    """A pynbody snapshot of the particles of one `family`."""
+    particles = pynbody.new(**{family: len(mass)})
+    particles["pos"] = pynbody.array.SimArray(pos, "kpc")
+    particles["vel"] = pynbody.array.SimArray(vel, "km s**-1")
+    particles["mass"] = pynbody.array.SimArray(mass, "Msol")
+    return particles
+
+
+def make_stars(pos, vel, mass):
+    """A pynbody snapshot of star particles."""
+    return make_particles("star", pos, vel, mass)
 
 
 def make_gas(pos, vel, mass):
     """A pynbody snapshot of gas particles, with a density."""
-    gas = make_stars(pos, vel, mass, family="gas")
+    gas = make_particles("gas", pos, vel, mass)
     gas["rho"] = pynbody.array.SimArray(np.full(len(mass), 1e7), "Msol kpc**-3")
     return gas
 
@@ -310,42 +315,9 @@ def test_render_stars_catalogue_center(fake_pynbody, fake_render):
     assert [call[0] for call in fake_render] == ["render"]
 
 
-@pytest.mark.parametrize(
-    "kwargs", [{"center_mode": "pot"}, {"orientation": "edgeon"}, {"render_args": {"with_dust": True}}]
-)
-def test_render_stars_rejects_unsupported(kwargs):
-    with pytest.raises(ValueError):
-        RenderStars(**kwargs)
-
-
-def test_pipeline_renders_stars(fake_pynbody, fake_render, tmp_path):
-    render = {"class_path": "pest.RenderStars", "init_args": {"resolution": 4, "min_particles": 1}}
-    df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
-
-    assert list(df["subhalo_id"]) == [1, 3]
-    assert np.stack([np.stack(row) for row in df.iloc[0]["image"]]).shape == (3, 4, 4)
-
-
-@pytest.mark.parametrize("min_particles", [32, 0])
-def test_render_stars_without_stars(fake_pynbody, fake_render, monkeypatch, min_particles):
-    halo = FakeHalo(0)
-    halo.st = make_stars(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0))
-    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
-    step = RenderStars(min_particles=min_particles)
-    step.bind(PynbodyDataset("snap_099"))
-
-    assert step({"subhalo_id": 0}) is None
-    assert fake_render == []
-
-
-def test_render_stars_requires_binding():
-    with pytest.raises(RuntimeError):
-        RenderStars()({"subhalo_id": 0})
-
-
-def test_render_stars_requires_stars():
-    with pytest.raises(TypeError):
-        RenderStars().bind(object())
+def test_render_stars_rejects_dust():
+    with pytest.raises(ValueError, match="with_dust"):
+        RenderStars(render_args={"with_dust": True})
 
 
 def test_gas_from_halo(fake_pynbody):
@@ -503,30 +475,45 @@ def test_pipeline_drops_failed_image(fake_pynbody, fake_render, monkeypatch, tmp
     assert f"dropped by {step}: 1" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
 @pytest.mark.parametrize("kwargs", [{"center_mode": "pot"}, {"orientation": "edgeon"}])
-def test_render_gas_rejects_unsupported(kwargs):
+def test_render_rejects_unsupported(render, kwargs):
     with pytest.raises(ValueError):
-        RenderGas(**kwargs)
+        render(**kwargs)
 
 
-def test_pipeline_renders_gas(fake_pynbody, fake_render, tmp_path):
-    render = {"class_path": "pest.RenderGas", "init_args": {"resolution": 4, "min_particles": 1}}
+@pytest.mark.parametrize("step, column, channels", [("RenderStars", "image", 3), ("RenderGas", "gas_image", 1)])
+def test_pipeline_renders(fake_pynbody, fake_render, tmp_path, step, column, channels):
+    render = {"class_path": f"pest.{step}", "init_args": {"resolution": 4, "min_particles": 1}}
     df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
 
     assert list(df["subhalo_id"]) == [1, 3]
-    assert np.stack([np.stack(row) for row in df.iloc[0]["gas_image"]]).shape == (1, 4, 4)
+    assert np.stack([np.stack(row) for row in df.iloc[0][column]]).shape == (channels, 4, 4)
 
 
+@pytest.mark.parametrize("render, family, make", [(RenderStars, "st", make_stars), (RenderGas, "g", make_gas)])
 @pytest.mark.parametrize("min_particles", [32, 0])
-def test_render_gas_without_gas(fake_pynbody, fake_render, monkeypatch, min_particles):
+def test_render_without_particles(fake_pynbody, fake_render, monkeypatch, render, family, make, min_particles):
     halo = FakeHalo(0)
-    halo.g = make_gas(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0))
+    setattr(halo, family, make(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0)))
     monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
-    step = RenderGas(min_particles=min_particles)
+    step = render(min_particles=min_particles)
     step.bind(PynbodyDataset("snap_099"))
 
     assert step({"subhalo_id": 0}) is None
     assert fake_render == []
+
+
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
+def test_render_requires_binding(render):
+    with pytest.raises(RuntimeError):
+        render()({"subhalo_id": 0})
+
+
+@pytest.mark.parametrize("render, component", [(RenderStars, "stars"), (RenderGas, "gas")])
+def test_render_requires_particles(render, component):
+    with pytest.raises(TypeError, match=f"does not provide the {component}"):
+        render().bind(object())
 
 
 def test_render_gas_empty_image(fake_pynbody, monkeypatch):
@@ -538,16 +525,6 @@ def test_render_gas_empty_image(fake_pynbody, monkeypatch):
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # dropped without a warning
         assert step({"subhalo_id": 3}) is None
-
-
-def test_render_gas_requires_binding():
-    with pytest.raises(RuntimeError):
-        RenderGas()({"subhalo_id": 0})
-
-
-def test_render_gas_requires_gas():
-    with pytest.raises(TypeError):
-        RenderGas().bind(object())
 
 
 # Synthetic TNG snapshot (in 2 files) and SUBFIND catalogue, generated by tests/make_illustris_tng_testdata.py
