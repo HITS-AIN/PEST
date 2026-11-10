@@ -8,6 +8,7 @@ import pytest
 
 import pest.pynbody_dataset
 from pest import FilterRange, LoadParticles, Pipeline, PynbodyDataset, RenderGas, RenderStars
+from pest.pynbody_dataset import simulation_name
 
 # 5 subhalos: stellar masses [Msun] and flags
 STELLAR_MASS = np.array([1e8, 5e9, 2e10, 3e10, 1e12])
@@ -137,6 +138,19 @@ def test_dataset_reads_catalogue_only(fake_pynbody):
     item = dataset[3]
     assert item == {"subhalo_id": 3, "snapshot": 99, "SubhaloSFR": 3.0}
     assert fake_pynbody.fake_halos.accessed == []
+
+
+@pytest.mark.parametrize(
+    "path, name",
+    [
+        ("data/TNG100-1/snapdir_099/snap_099", "TNG100-1"),
+        ("data/TNG50-1/snapshot_099/snap_099", "TNG50-1"),
+        ("data/Illustris-1/snapdir_135/snap_135", "Illustris-1"),
+        ("data/run1/snap_099.hdf5", "run1"),
+    ],
+)
+def test_simulation_name(path, name):
+    assert simulation_name(path) == name
 
 
 def test_particle_columns_rejected(fake_pynbody):
@@ -538,6 +552,7 @@ def test_tng_catalogue():
     assert type(dataset.halos).__name__ == "TNGSubfindHDFCatalogue"
     assert len(dataset) == 5
     assert dataset[3] == {"subhalo_id": 3, "snapshot": 99, "SubhaloSFR": np.float32(1.2), "SubhaloFlag": 1}
+    assert PynbodyDataset(TNG_SNAPSHOT, columns=["simulation"])[0] == {"simulation": "TNG50-1"}
     mask = FilterRange("SubhaloMassType", index=4, min=2e9, units="Msol").mask(dataset.table())
     assert list(np.flatnonzero(mask)) == [0, 3]
 
@@ -827,6 +842,11 @@ def test_dataset_with_list_of_snapshots(fake_pynbody):
     assert dataset[3] == {"subhalo_id": 3, "snapshot": 99}
     assert dataset[8] == {"subhalo_id": 3, "snapshot": 98}
     assert len(dataset.table()["SubhaloSFR"]) == 10
+    dataset = PynbodyDataset(
+        ["TNG50-1/snapdir_099/snap_099", "TNG100-1/snapdir_099/snap_099"], columns=["subhalo_id", "simulation"]
+    )
+    assert dataset[3] == {"subhalo_id": 3, "simulation": "TNG50-1"}
+    assert dataset[8] == {"subhalo_id": 3, "simulation": "TNG100-1"}
     assert dataset.particles(3, "stars", ["pos"])["pos"].shape[1] == 3
 
 

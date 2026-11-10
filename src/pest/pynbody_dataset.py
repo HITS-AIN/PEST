@@ -14,6 +14,10 @@ COMPONENTS = {"stars": "st", "gas": "g", "dm": "dm"}
 # find the Illustris catalogue files (see `IllustrisSubfindHDFCatalogue`).
 SUBFIND_CATALOGUES = ["TNGSubfindHDFCatalogue", "IllustrisSubfindHDFCatalogue"]
 DEFAULT_COLUMNS = ["subhalo_id"]
+# Columns that the dataset provides besides the halo catalogue properties.
+RECORD_COLUMNS = ("subhalo_id", "snapshot", "simulation")
+# Directories of a snapshot in several files, e.g. `snapdir_099` (IllustrisTNG) or `snapshot_099`.
+SNAPSHOT_DIRECTORY = re.compile(r"snap(?:dir|shot)_\d+")
 PARTICLE_FIELDS = {"pos", "vel", "mass"}
 # Catalogue properties holding the (position, velocity) of the subhalo center, per catalogue format.
 CENTER_PROPERTIES = [("SubhaloPos", "SubhaloVel"), ("sub_pos", "sub_vel")]
@@ -21,6 +25,18 @@ CENTER_PROPERTIES = [("SubhaloPos", "SubhaloVel"), ("sub_pos", "sub_vel")]
 STAR_ARRAYS = ["pos", "mass", "aform", "metals"]
 # Gas arrays that `gas()` provides for rendering.
 GAS_ARRAYS = ["pos", "mass", "rho"]
+
+
+def simulation_name(snapshot_path: str | Path) -> str:
+    """The name of the simulation of a snapshot, taken from its directory, e.g. "TNG100-1".
+
+    That is the directory containing the snapshot, or, for a snapshot in its own
+    directory (e.g. `TNG100-1/snapdir_099/snap_099`), the one above it.
+    """
+    directory = Path(snapshot_path).absolute().parent
+    if SNAPSHOT_DIRECTORY.fullmatch(directory.name):
+        directory = directory.parent
+    return directory.name
 
 
 class IllustrisSubfindHDFCatalogue(TNGSubfindHDFCatalogue):
@@ -73,7 +89,8 @@ class PynbodyDataset:
             with one path per snapshot. If `None`, pynbody locates it next to
             the snapshot.
         columns (list[str] | None): Columns to extract: "subhalo_id", "snapshot",
-            or any halo catalogue property (e.g. "SubhaloSFR"). Which properties
+            "simulation" (the name of the simulation directory, see
+            `simulation_name()`), or any halo catalogue property (e.g. "SubhaloSFR"). Which properties
             exist depends on the catalogue format; some (e.g. EAGLE, AdaptaHOP)
             provide none. Defaults to `["subhalo_id"]`.
         halos_args (dict | None): Keyword arguments for pynbody's `halos()`,
@@ -109,7 +126,7 @@ class PynbodyDataset:
 
         # Only the catalogue arrays are read here, no particle data.
         self.properties = self.halos.get_properties_all_halos()
-        missing = [col for col in self.columns if col not in ("subhalo_id", "snapshot", *self.properties)]
+        missing = [col for col in self.columns if col not in (*RECORD_COLUMNS, *self.properties)]
         if missing:
             raise KeyError(f"Columns {missing} are not in the halo catalogue, available: {sorted(self.properties)}")
         self.center_properties = next(
@@ -124,6 +141,7 @@ class PynbodyDataset:
         name = Path(snapshot_path).name
         match = re.search(r"snap(?:shot)?_(\d+)", name) or re.search(r"(\d+)$", name.removesuffix(".hdf5"))
         self.snapshot_number = np.int32(match.group(1)) if match else None
+        self.simulation = simulation_name(snapshot_path)
 
     def _load_halos(self, halos_path: str | None, halos_args: dict | None):
         kwargs = {} if halos_path is None else {"filename": halos_path}
@@ -149,6 +167,8 @@ class PynbodyDataset:
                 data["subhalo_id"] = np.int32(self.halo_numbers[index])
             elif col == "snapshot":
                 data["snapshot"] = self.snapshot_number
+            elif col == "simulation":
+                data["simulation"] = self.simulation
             else:
                 data[col] = np.asarray(self.properties[col][index])
         return data
