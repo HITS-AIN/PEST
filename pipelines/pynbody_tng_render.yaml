@@ -17,24 +17,20 @@ transform:
     init_args:
       column: SubhaloFlag
       min: 1
-  - class_path: pest.FilterRange
-    # RenderStars can only handle galaxies with at least 32 star particles
-    init_args:
-      column: SubhaloLenType
-      index: 4
-      min: 32
   - class_path: pest.RenderStars
     init_args:
       column: star_plot
       width: 50 # [kpc]
       resolution: 256
       orientation: faceon
+      min_particles: 32
   - class_path: pest.RenderGas
     init_args:
       column: gas_plot
       width: 50 # [kpc]
       resolution: 256
       orientation: faceon
+      min_particles: 32
 
 load:
   - class_path: pest.ParquetWriter

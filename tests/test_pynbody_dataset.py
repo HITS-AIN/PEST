@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -274,7 +275,9 @@ def fake_render(monkeypatch):
 
 
 def test_render_stars(fake_pynbody, fake_render):
-    step = RenderStars(width="30 kpc", resolution=4, center_mode="ssc", render_args={"dynamic_range": 3.0})
+    step = RenderStars(
+        width="30 kpc", resolution=4, center_mode="ssc", render_args={"dynamic_range": 3.0}, min_particles=1
+    )
     step.bind(PynbodyDataset("snap_099"))
 
     record = step({"subhalo_id": np.int32(3)})
@@ -300,7 +303,7 @@ def test_render_stars(fake_pynbody, fake_render):
 
 
 def test_render_stars_catalogue_center(fake_pynbody, fake_render):
-    step = RenderStars(resolution=4, center_mode="catalogue")
+    step = RenderStars(resolution=4, center_mode="catalogue", min_particles=1)
     step.bind(PynbodyDataset("snap_099"))
 
     step({"subhalo_id": 3})
@@ -316,22 +319,22 @@ def test_render_stars_rejects_unsupported(kwargs):
 
 
 def test_pipeline_renders_stars(fake_pynbody, fake_render, tmp_path):
-    render = {"class_path": "pest.RenderStars", "init_args": {"resolution": 4}}
+    render = {"class_path": "pest.RenderStars", "init_args": {"resolution": 4, "min_particles": 1}}
     df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
 
     assert list(df["subhalo_id"]) == [1, 3]
     assert np.stack([np.stack(row) for row in df.iloc[0]["image"]]).shape == (3, 4, 4)
 
 
-def test_render_stars_without_stars(fake_pynbody, fake_render, monkeypatch):
+@pytest.mark.parametrize("min_particles", [32, 0])
+def test_render_stars_without_stars(fake_pynbody, fake_render, monkeypatch, min_particles):
     halo = FakeHalo(0)
     halo.st = make_stars(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0))
     monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
-    step = RenderStars()
+    step = RenderStars(min_particles=min_particles)
     step.bind(PynbodyDataset("snap_099"))
 
-    with pytest.raises(ValueError, match="no star particles"):
-        step({"subhalo_id": 0})
+    assert step({"subhalo_id": 0}) is None
     assert fake_render == []
 
 
@@ -356,7 +359,9 @@ def test_gas_from_halo(fake_pynbody):
 
 
 def test_render_gas(fake_pynbody, fake_render):
-    step = RenderGas(width="30 kpc", resolution=4, center_mode="ssc", render_args={"kernel": "WendlandC2"})
+    step = RenderGas(
+        width="30 kpc", resolution=4, center_mode="ssc", render_args={"kernel": "WendlandC2"}, min_particles=1
+    )
     step.bind(PynbodyDataset("snap_099"))
 
     record = step({"subhalo_id": np.int32(3)})
@@ -384,7 +389,7 @@ def test_render_gas(fake_pynbody, fake_render):
 
 
 def test_render_gas_linear(fake_pynbody, fake_render):
-    step = RenderGas(resolution=4, center_mode="catalogue", log=False, column="gas")
+    step = RenderGas(resolution=4, center_mode="catalogue", log=False, column="gas", min_particles=1)
     step.bind(PynbodyDataset("snap_099"))
 
     image = step({"subhalo_id": 3})["gas"]
@@ -394,11 +399,16 @@ def test_render_gas_linear(fake_pynbody, fake_render):
 
 
 def test_render_gas_reads_quantity_and_weight(fake_pynbody, fake_render, monkeypatch):
+    halo = FakeHalo(3)
+    halo.g["vel"][:, 0] += 1.0  # not parallel to the positions, so the gas has an angular momentum to orient by
+    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
     dataset = PynbodyDataset("snap_099")
     requested = []
     gas = dataset.gas
     monkeypatch.setattr(dataset, "gas", lambda *args, **kwargs: requested.append(kwargs) or gas(*args, **kwargs))
-    step = RenderGas(resolution=4, qty="temp", units=None, render_args={"weight": "rho"}, orientation="faceon")
+    step = RenderGas(
+        resolution=4, qty="temp", units=None, render_args={"weight": "rho"}, orientation="faceon", min_particles=1
+    )
     step.bind(dataset)
     monkeypatch.setattr(pynbody.analysis, "faceon", lambda halo, **kw: fake_render.append(("faceon", halo, kw)))
 
@@ -409,6 +419,90 @@ def test_render_gas_reads_quantity_and_weight(fake_pynbody, fake_render, monkeyp
     assert fake_render[2][2]["units"] is None
 
 
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
+@pytest.mark.parametrize("kwargs, rendered", [({}, False), ({"min_particles": 5}, False), ({"min_particles": 4}, True)])
+def test_render_min_particles(fake_pynbody, fake_render, render, kwargs, rendered):
+    # Subhalo 3 has 4 star and 4 gas particles.
+    step = render(resolution=4, center_mode="catalogue", **kwargs)
+    step.bind(PynbodyDataset("snap_099"))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # dropped without a warning
+        record = step({"subhalo_id": 3})
+    assert (record is not None) == rendered
+    assert len(fake_render) == int(rendered)
+
+
+@pytest.mark.parametrize("orientation", ["faceon", "sideon"])
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
+def test_render_without_angular_momentum(fake_pynbody, fake_render, render, orientation):
+    # No particle lies within 1 kpc of the center, so there is no angular momentum to orient the galaxy by.
+    step = render(resolution=4, center_mode="catalogue", orientation=orientation, disk_size=1.0, min_particles=1)
+    step.bind(PynbodyDataset("snap_099"))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # dropped without a warning
+        assert step({"subhalo_id": 3}) is None
+    assert fake_render == []
+
+
+@pytest.mark.parametrize("render, name", [(RenderStars, "stars"), (RenderGas, "gas")])
+def test_render_drops_failed_image(fake_pynbody, monkeypatch, render, name):
+    def fail(halo, **kwargs):
+        raise KeyError("no such array")
+
+    monkeypatch.setattr(pynbody.plot.stars, "render", fail)
+    monkeypatch.setattr(pynbody.plot, "image", fail)
+    step = render(center_mode="catalogue", min_particles=1)
+    step.bind(PynbodyDataset("snap_099"))
+
+    with pytest.warns(UserWarning, match=f"Subhalo 3 is dropped, its {name} could not be rendered: KeyError: 'no such"):
+        assert step({"subhalo_id": 3}) is None
+
+
+@pytest.mark.parametrize("step, column", [("RenderStars", "image"), ("RenderGas", "gas_image")])
+@pytest.mark.parametrize("init_args", [{"min_particles": 3}, {"min_particles": 1, "orientation": "faceon"}])
+def test_pipeline_drops_subhalo_without_image(
+    fake_pynbody, fake_render, monkeypatch, tmp_path, capsys, step, column, init_args
+):
+    # Subhalos 1 and 3 pass the filters. Subhalo 1 has 2 particles, and only subhalo 3 an angular momentum.
+    def load_copy(subhalo_id):
+        halo = FakeHalo(subhalo_id)
+        if subhalo_id == 3:
+            for particles in (halo.st, halo.g):
+                particles["vel"][:, 0] += 1.0  # not parallel to the positions
+        return halo
+
+    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", load_copy)
+    render = {"class_path": f"pest.{step}", "init_args": {"resolution": 4, **init_args}}
+    df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
+
+    assert list(df["subhalo_id"]) == [3]
+    assert np.stack([np.stack(row) for row in df.iloc[0][column]]).shape[1:] == (4, 4)
+    assert f"dropped by {step}: 1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("step", ["RenderStars", "RenderGas"])
+def test_pipeline_drops_failed_image(fake_pynbody, fake_render, monkeypatch, tmp_path, capsys, step):
+    def fail_for_small(render):
+        def wrapper(halo, **kwargs):
+            if len(halo) < 3:
+                raise ValueError("too few particles")
+            return render(halo, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(pynbody.plot.stars, "render", fail_for_small(pynbody.plot.stars.render))
+    monkeypatch.setattr(pynbody.plot, "image", fail_for_small(pynbody.plot.image))
+    render = {"class_path": f"pest.{step}", "init_args": {"resolution": 4, "min_particles": 1}}
+    # Subhalos 1 and 3 pass the filters, with 2 and 4 particles.
+    with pytest.warns(UserWarning, match="Subhalo 1 is dropped, .* ValueError: too few particles"):
+        df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
+
+    assert list(df["subhalo_id"]) == [3]
+    assert f"dropped by {step}: 1" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("kwargs", [{"center_mode": "pot"}, {"orientation": "edgeon"}])
 def test_render_gas_rejects_unsupported(kwargs):
     with pytest.raises(ValueError):
@@ -416,32 +510,34 @@ def test_render_gas_rejects_unsupported(kwargs):
 
 
 def test_pipeline_renders_gas(fake_pynbody, fake_render, tmp_path):
-    render = {"class_path": "pest.RenderGas", "init_args": {"resolution": 4}}
+    render = {"class_path": "pest.RenderGas", "init_args": {"resolution": 4, "min_particles": 1}}
     df = _run_pipeline(tmp_path, [MASS_FILTER, FLAG_FILTER, render])
 
     assert list(df["subhalo_id"]) == [1, 3]
     assert np.stack([np.stack(row) for row in df.iloc[0]["gas_image"]]).shape == (1, 4, 4)
 
 
-def test_render_gas_without_gas(fake_pynbody, fake_render, monkeypatch):
+@pytest.mark.parametrize("min_particles", [32, 0])
+def test_render_gas_without_gas(fake_pynbody, fake_render, monkeypatch, min_particles):
     halo = FakeHalo(0)
     halo.g = make_gas(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0))
     monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
-    step = RenderGas()
+    step = RenderGas(min_particles=min_particles)
     step.bind(PynbodyDataset("snap_099"))
 
-    with pytest.raises(ValueError, match="no gas particles"):
-        step({"subhalo_id": 0})
+    assert step({"subhalo_id": 0}) is None
     assert fake_render == []
 
 
 def test_render_gas_empty_image(fake_pynbody, monkeypatch):
     monkeypatch.setattr(pynbody.plot, "image", lambda halo, **kwargs: np.zeros((4, 4)))
-    step = RenderGas(center_mode="catalogue")
+    step = RenderGas(center_mode="catalogue", min_particles=1)
     step.bind(PynbodyDataset("snap_099"))
 
-    with pytest.raises(ValueError, match="no positive"):
-        step({"subhalo_id": 3})
+    # No positive pixel to take the log of.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # dropped without a warning
+        assert step({"subhalo_id": 3}) is None
 
 
 def test_render_gas_requires_binding():
@@ -665,6 +761,39 @@ def test_tng_render_gas_orientation(orientation):
     # The direct reading of the snapshot gives the same image as loading the halo with pynbody.
     dataset.direct_loading = False
     np.testing.assert_allclose(image, step({"subhalo_id": 0})["gas_image"], atol=1e-5)
+
+
+@pytest.mark.filterwarnings("ignore")
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
+def test_tng_render_without_angular_momentum(render):
+    # No particle lies this close to the center, so there is no angular momentum to orient the galaxy by.
+    step = render(width=20, resolution=16, center_mode="catalogue", orientation="faceon", disk_size=1e-6)
+    step.bind(PynbodyDataset(TNG_SNAPSHOT))
+
+    assert step({"subhalo_id": 0}) is None
+
+
+@pytest.mark.filterwarnings("ignore")
+@pytest.mark.parametrize("render, column", [(RenderStars, "image"), (RenderGas, "gas_image")])
+def test_tng_render_drops_small_subhalos(render, column):
+    # Only subhalo 0 has the 32 star and gas particles that the SPH smoothing of pynbody needs.
+    step = render(width=20, resolution=16)
+    step.bind(PynbodyDataset(TNG_SNAPSHOT))
+
+    assert column in step({"subhalo_id": 0})
+    for subhalo_id in range(1, 5):
+        assert step({"subhalo_id": subhalo_id}) is None
+
+
+@pytest.mark.filterwarnings("ignore")
+@pytest.mark.parametrize("render", [RenderStars, RenderGas])
+def test_tng_render_drops_failed_image(render):
+    # Subhalo 3 has fewer particles than the SPH smoothing of pynbody needs, so its rendering fails.
+    step = render(width=20, resolution=16, min_particles=1)
+    step.bind(PynbodyDataset(TNG_SNAPSHOT))
+
+    with pytest.warns(UserWarning, match="Subhalo 3 is dropped, .* ValueError: Number of smoothing particles"):
+        assert step({"subhalo_id": 3}) is None
 
 
 @pytest.mark.filterwarnings("ignore")

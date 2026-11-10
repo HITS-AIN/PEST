@@ -1,19 +1,23 @@
 import numpy as np
 import pynbody
 
-from .render_stars import center_and_orient, check_center_and_orientation
+from .render_stars import center_and_orient, check_center_and_orientation, render_or_drop
 
 
 class RenderGas:
-    """Transform step that adds a gas image of a subhalo to the record.
+    """Filter step that adds a gas image of a subhalo to the record.
 
     The pipeline binds the worker's dataset to this step, which must provide
     `gas(subhalo_id)` returning a snapshot of the gas particles of the subhalo,
     centered on the subhalo (e.g. `PynbodyDataset`). The center is refined on
     the gas with `pynbody.analysis.center`, and the image is rendered with
-    `pynbody.plot.image`, by default the projected gas surface density. The
-    SPH smoothing needs at least 32 gas particles (pynbody's default number of
-    neighbours).
+    `pynbody.plot.image`, by default the projected gas surface density.
+
+    The step returns the record with the image, or `None` for a subhalo that
+    cannot be rendered, which the pipeline drops like a record rejected by a
+    filter: one with fewer than `min_particles` gas particles, one that cannot
+    be oriented (see `orientation`), one without a positive pixel for `log`,
+    and one whose rendering fails, which is reported with a warning.
 
     Args:
         width (float | str): Image width, as a float in the snapshot units
@@ -28,7 +32,9 @@ class RenderGas:
             `pynbody.analysis.faceon` or `pynbody.analysis.sideon`, which orient
             the angular momentum of the gas within `disk_size` along the line
             of sight or perpendicular to it. If `None`, the image is not rotated.
-            The velocities of the gas are loaded for this.
+            The velocities of the gas are loaded for this. A galaxy whose gas
+            within `disk_size` has no angular momentum, e.g. with no gas that
+            close to the center, cannot be oriented and is dropped.
         disk_size (float | str): Radius around the center that determines the
             angular momentum for `orientation`, as a float in the snapshot units
             or a unit string.
@@ -40,13 +46,19 @@ class RenderGas:
             `render_args` sets a `weight`, e.g. `{"weight": "rho"}` for the
             density-weighted average of `qty` along the line of sight.
         log (bool): Store the log10 of the image. Pixels without a positive
-            value are set to the smallest positive one. Only for quantities
-            that are positive.
+            value are set to the smallest positive one, and a subhalo without
+            any positive pixel is dropped. Only for quantities that are
+            positive.
         column (str): Name of the added column.
         render_args (dict | None): Additional arguments for
             `pynbody.plot.image`, e.g. `{"weight": "rho"}` or
             `{"kernel": "WendlandC2"}`.
+        min_particles (int): Drop subhalos with fewer gas particles. The
+            default is the number of neighbours of pynbody's SPH smoothing
+            (32), which fails with fewer particles.
     """
+
+    is_filter = True
 
     def __init__(
         self,
@@ -60,6 +72,7 @@ class RenderGas:
         log: bool = True,
         column: str = "gas_image",
         render_args: dict | None = None,
+        min_particles: int = 32,
     ):
         check_center_and_orientation(center_mode, orientation)
         self.width = width
@@ -74,6 +87,7 @@ class RenderGas:
         self.render_args = render_args or {}
         # Arrays besides the default ones of `gas()` that the renderer reads.
         self.arrays = [name for name in (qty, self.render_args.get("weight")) if isinstance(name, str)]
+        self.min_particles = min_particles
         self.dataset = None
 
     def bind(self, dataset) -> None:
@@ -81,16 +95,23 @@ class RenderGas:
             raise TypeError(f"{type(dataset).__name__} does not provide gas particles.")
         self.dataset = dataset
 
-    def __call__(self, record: dict) -> dict:
+    def __call__(self, record: dict) -> dict | None:
         if self.dataset is None:
             raise RuntimeError("RenderGas must be bound to a dataset before use.")
         if "subhalo_id" not in record:
             raise KeyError("RenderGas requires the 'subhalo_id' column in the extracted records.")
         subhalo_id = record["subhalo_id"]
         gas = self.dataset.gas(subhalo_id, velocities=self.orientation is not None, arrays=self.arrays)
-        if len(gas) == 0:
-            raise ValueError(f"Subhalo {subhalo_id} has no gas particles to render.")
-        center_and_orient(gas, self.center_mode, self.orientation, self.disk_size)
+        image = render_or_drop(self._render, gas, self.min_particles, subhalo_id, "gas")
+        if image is None:
+            return None
+        record[self.column] = image
+        return record
+
+    def _render(self, gas) -> np.ndarray | None:
+        """The image of `gas`, or None if it cannot be oriented or has no positive pixel to take the log of."""
+        if not center_and_orient(gas, self.center_mode, self.orientation, self.disk_size):
+            return None
         image = pynbody.plot.image(
             gas,
             qty=self.qty,
@@ -105,8 +126,7 @@ class RenderGas:
         if self.log:
             positive = image > 0
             if not positive.any():
-                raise ValueError(f"Subhalo {subhalo_id} has no positive {self.qty!r} in the image to take the log of.")
+                return None
             image = np.log10(np.where(positive, image, image[positive].min()))
         # Channels first: (1, height, width).
-        record[self.column] = image[np.newaxis].astype(np.float32)
-        return record
+        return image[np.newaxis].astype(np.float32)

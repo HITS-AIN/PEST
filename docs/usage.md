@@ -362,15 +362,21 @@ load:
 shape `(3, height, width)`, channels first and rows from top to bottom. Before rendering, the
 center is refined on the star particles.
 
+`RenderStars` is also a filter: a subhalo that cannot be rendered is dropped, and the summary of
+the run counts it as dropped by `RenderStars`. That is a subhalo with fewer than `min_particles`
+stars, one that cannot be oriented (see `orientation`), and one whose rendering fails, which is
+reported with a warning that names the subhalo and the error.
+
 | Argument | Description |
 |---|---|
 | `width` | Image width, as a float in kpc or a unit string, e.g. `50 kpc` (default 50) |
 | `resolution` | Image size in pixels (default: pynbody's default) |
 | `center_mode` | pynbody centering scheme to refine the center on the stars: `ssc` (default), `com` or `hyb`. `catalogue` keeps the catalogue center |
-| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the star velocities as well |
+| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the star velocities as well. A galaxy whose stars within `disk_size` have no angular momentum, e.g. with no star that close to the center, cannot be oriented and is dropped |
 | `disk_size` | Radius around the center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
 | `column` | Name of the added column (default `image`) |
 | `render_args` | Further arguments for `pynbody.plot.stars.render`, e.g. `{dynamic_range: 3.0}` or the bands `r_band`, `g_band` and `b_band` (default `I`, `V` and `U`). Dust (`with_dust`) is not supported, as pynbody computes it from the gas particles, which are not loaded |
+| `min_particles` | Drop subhalos with fewer star particles (default 32, the number of neighbours of pynbody's SPH smoothing, which fails with fewer) |
 
 For IllustrisTNG-like snapshots, the star particles are read
 {ref}`directly from the snapshot files <usage-tng-direct>`.
@@ -380,8 +386,9 @@ For IllustrisTNG-like snapshots, the star particles are read
 
 `RenderGas` is the gas counterpart of `RenderStars`: it renders the gas particles of each subhalo
 with `pynbody.plot.image`, by default into a map of the projected gas surface density. Use it in place
-of, or next to, `RenderStars`, and select subhalos with at least 32 gas particles, which the SPH
-smoothing needs:
+of, or next to, `RenderStars`. The SPH smoothing needs at least 32 gas particles, so `RenderGas` drops
+subhalos with fewer (`min_particles`). A leading `FilterRange` drops them faster, before any
+particle is read:
 
 ```yaml
 transform:
@@ -404,18 +411,25 @@ transform:
 from top to bottom, so the image transforms work on it as on star images. Before rendering, the
 center is refined on the gas particles, and `orientation` uses the angular momentum of the gas.
 
+Like `RenderStars`, `RenderGas` is also a filter: a subhalo that cannot be rendered is dropped, and
+the summary of the run counts it as dropped by `RenderGas`. That is a subhalo with fewer than
+`min_particles` gas particles, one that cannot be oriented (see `orientation`), one without a
+positive pixel for `log`, and one whose rendering fails, which is reported with a warning that
+names the subhalo and the error.
+
 | Argument | Description |
 |---|---|
 | `width` | Image width, as a float in kpc or a unit string, e.g. `50 kpc` (default 50) |
 | `resolution` | Image size in pixels (default: pynbody's default) |
 | `center_mode` | pynbody centering scheme to refine the center on the gas: `ssc` (default), `com` or `hyb`. `catalogue` keeps the catalogue center |
-| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the gas velocities as well |
+| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the gas velocities as well. A galaxy whose gas within `disk_size` has no angular momentum, e.g. with no gas that close to the center, cannot be oriented and is dropped |
 | `disk_size` | Radius around the center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
 | `qty` | Gas array to render (default `rho`) |
 | `units` | Units of the image (default `Msol kpc**-2`). Units of `qty` integrated along the line of sight give a projected image; `null` keeps the units of `qty`, which gives a slice at z = 0 unless `render_args` sets a `weight` |
-| `log` | Store the log10 of the image, with pixels without gas set to the smallest positive value (default `true`). Set it to `false` for linear values or quantities that can be negative |
+| `log` | Store the log10 of the image, with pixels without gas set to the smallest positive value (default `true`). A subhalo without any positive pixel is dropped. Set it to `false` for linear values or quantities that can be negative |
 | `column` | Name of the added column (default `gas_image`) |
 | `render_args` | Further arguments for `pynbody.plot.image`, e.g. `{kernel: WendlandC2}` |
+| `min_particles` | Drop subhalos with fewer gas particles (default 32, the number of neighbours of pynbody's SPH smoothing, which fails with fewer) |
 
 For example, the density-weighted temperature along the line of sight is
 `qty: temp`, `units: null` and `render_args: {weight: rho}`.
