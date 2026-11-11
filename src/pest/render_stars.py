@@ -54,6 +54,7 @@ class RenderStars(RenderParticles):
     def __init__(
         self,
         width: float | str = 50,
+        width_units: str = "kpc",
         resolution: int | None = None,
         center_mode: str | None = None,
         orientation: str | None = None,
@@ -62,7 +63,9 @@ class RenderStars(RenderParticles):
         render_args: dict | None = None,
         min_particles: int = 32,
     ):
-        super().__init__(width, resolution, center_mode, orientation, disk_size, column, render_args, min_particles)
+        super().__init__(
+            width, width_units, resolution, center_mode, orientation, disk_size, column, render_args, min_particles
+        )
         if self.render_args.get("with_dust"):
             raise ValueError("with_dust is not supported: pynbody computes the dust from the gas, which is not loaded.")
 
@@ -76,6 +79,11 @@ class RenderStars(RenderParticles):
         stars["rho"] = SimArray(
             np.ones(len(stars), dtype=stars["pos"].dtype), stars["mass"].units / stars["pos"].units ** 3
         )
+
+        # Calc half mass radius of stars
+        if self.width_units == "stars_half_mass_radius":
+            self.width = pynbody.analysis.halo.half_mass_radius(stars, mass="mass") * self.width
+
         image = pynbody.plot.stars.render(
             stars,
             width=self.width,
