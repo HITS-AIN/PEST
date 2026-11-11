@@ -1,9 +1,11 @@
 import argparse
+import contextlib
 import importlib
 import importlib.metadata
 import multiprocessing
 import os
 import subprocess
+import sys
 import time
 
 import numpy as np
@@ -218,6 +220,13 @@ class Pipeline:
         Extraction and transformation are fused into a single pass per record:
         each worker loads one record and immediately runs the whole transform
         chain on it, instead of rewriting the full dataset once per step.
+
+        The transformed records are streamed into the load step while the
+        workers produce them, so they are never all held in memory. Load steps
+        that do not read the records (`consumes_records = False`, e.g.
+        `HuggingFaceWriter`, which reads the file of a `ParquetWriter`) run
+        afterwards. Only with several load steps consuming the records are
+        they collected in a list, as each of them iterates over all records.
         """
         extract_cfg = self.config["extract"]
         transform_cfgs = self.config.get("transform", [])
@@ -253,33 +262,49 @@ class Pipeline:
             f"Extract+Transform: processing {len(indices)} records with {self.num_workers} worker(s), "
             f"{self.threads_per_worker} thread(s) each"
         )
-        transform_start = time.perf_counter()
-        if self.num_workers > 1:
-            with multiprocessing.Pool(
-                self.num_workers,
-                initializer=_init_worker,
-                initargs=(extract_cfg, transform_cfgs, start_step, self.threads_per_worker),
-            ) as pool:
-                results = list(pool.imap(_process_record, indices, chunksize=max(1, self.batch_size)))
-        else:
-            _init_worker(extract_cfg, transform_cfgs, start_step, self.threads_per_worker)
-            results = [_process_record(i) for i in indices]
+        load_cfgs = self.config.get("load", [])
+        loads = [_instantiate(cfg["class_path"], cfg.get("init_args", {})) for cfg in load_cfgs]
+        num_consuming = sum(getattr(load, "consumes_records", True) for load in loads)
 
-        records = []
+        transform_start = time.perf_counter()
+        num_kept = 0
         extract_time = 0.0
-        for record, dropped_by, timings in results:
-            if record is not None:
-                records.append(record)
-            else:
-                dropped_counts[dropped_by] = dropped_counts.get(dropped_by, 0) + 1
-            extract_time += timings[0]
-            num_executed = len(timings) - 1
-            step_times[start_step : start_step + num_executed] += timings[1:]
-            step_calls[start_step : start_step + num_executed] += 1
-        del results
+        progress_interval = max(1, len(indices) // 20)
+
+        def stream(results):
+            nonlocal num_kept, extract_time
+            for num_done, (record, dropped_by, timings) in enumerate(results, start=1):
+                if record is not None:
+                    num_kept += 1
+                else:
+                    dropped_counts[dropped_by] = dropped_counts.get(dropped_by, 0) + 1
+                extract_time += timings[0]
+                num_executed = len(timings) - 1
+                step_times[start_step : start_step + num_executed] += timings[1:]
+                step_calls[start_step : start_step + num_executed] += 1
+                if num_done % progress_interval == 0 or num_done == len(indices):
+                    print(
+                        f"  {num_done}/{len(indices)} records processed, {num_kept} kept "
+                        f"({time.perf_counter() - transform_start:.0f}s)"
+                    )
+                if record is not None:
+                    yield record
+
+        load_times = []
+        with self._results(extract_cfg, transform_cfgs, start_step, indices) as results:
+            records = stream(results)
+            if num_consuming > 1:
+                records = list(records)
+            for load in loads:
+                start = time.perf_counter()
+                load(records)
+                load_times.append((load.__class__.__name__, time.perf_counter() - start))
+            # Without a load step consuming the records, they are still processed (e.g. for the statistics).
+            for _ in records:
+                pass
 
         print(
-            f"Extract+Transform: kept {len(records)}/{num_records} records "
+            f"Extract+Transform+Load: kept {num_kept}/{num_records} records "
             f"in {time.perf_counter() - transform_start:.2f}s"
         )
         for name, count in dropped_counts.items():
@@ -293,19 +318,24 @@ class Pipeline:
         for i in range(start_step, len(steps)):
             self._print_step_time(steps[i].label, step_times[i], step_calls[i], label_width)
 
-        # Load
-        load_start = time.perf_counter()
-        load_cfgs = self.config.get("load", [])
-        loads = [_instantiate(cfg["class_path"], cfg.get("init_args", {})) for cfg in load_cfgs]
-
-        load_times = []
-        for load in loads:
-            start = time.perf_counter()
-            load(records)
-            load_times.append((load.__class__.__name__, time.perf_counter() - start))
-        print(f"Load: {len(records)} records in {time.perf_counter() - load_start:.2f}s")
+        # The streaming load steps run while the records are produced, so their time includes waiting for them.
+        print("Time per load step (including waiting for the records):")
         for name, seconds in load_times:
             print(f"  {name}: {seconds:.2f}s")
+
+    @contextlib.contextmanager
+    def _results(self, extract_cfg: dict, transform_cfgs: list[dict], start_step: int, indices: np.ndarray):
+        """Iterator over the results of `_process_record()` for `indices`, in order, computed by the workers."""
+        if self.num_workers > 1:
+            with multiprocessing.Pool(
+                self.num_workers,
+                initializer=_init_worker,
+                initargs=(extract_cfg, transform_cfgs, start_step, self.threads_per_worker),
+            ) as pool:
+                yield pool.imap(_process_record, indices, chunksize=max(1, self.batch_size))
+        else:
+            _init_worker(extract_cfg, transform_cfgs, start_step, self.threads_per_worker)
+            yield (_process_record(i) for i in indices)
 
     @staticmethod
     def _print_step_time(label: str, total: float, calls: int, label_width: int) -> None:
@@ -316,6 +346,9 @@ class Pipeline:
 def main() -> None:
     """CLI entry point: read a YAML config file and run the pipeline."""
 
+    # Batch jobs write the output to a file, which Python buffers in blocks: the progress would show up late, and
+    # be lost if the job is killed, e.g. for running out of memory.
+    sys.stdout.reconfigure(line_buffering=True)
     print_header()
 
     parser = argparse.ArgumentParser(

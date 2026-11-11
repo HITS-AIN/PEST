@@ -16,6 +16,9 @@ class HuggingFaceWriter:
             Hugging Face Hub repository.
     """
 
+    # The pipeline streams its records into the load steps that consume them, see `Pipeline.run()`.
+    consumes_records = False
+
     def __init__(self, parquet_path: str, repo_id: str | None = None):
         self.parquet_path = parquet_path
         self.repo_id = repo_id

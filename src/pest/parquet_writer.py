@@ -16,11 +16,39 @@ def _column_array(values: list) -> pa.Array:
     """
     sample = values[0]
     if isinstance(sample, (np.ndarray, np.generic)):
-        arrow_type = pa.from_numpy_dtype(np.asarray(sample).dtype)
-        for _ in range(np.ndim(sample)):
+        dtype = np.asarray(sample).dtype
+        ndim = np.ndim(sample)
+        if ndim > 0 and dtype != object and all(isinstance(v, np.ndarray) and v.ndim == ndim for v in values):
+            return _nested_list_array([np.asarray(v, dtype=dtype) for v in values], pa.from_numpy_dtype(dtype))
+        arrow_type = pa.from_numpy_dtype(dtype)
+        for _ in range(ndim):
             arrow_type = pa.list_(arrow_type)
-        return pa.array([np.asarray(v).tolist() for v in values], type=arrow_type)
+        return pa.array([np.asarray(v).tolist() if v is not None else None for v in values], type=arrow_type)
     return pa.array(values)
+
+
+def _nested_list_array(arrays: list[np.ndarray], value_type: pa.DataType) -> pa.Array:
+    """Nested lists (one nesting level per dimension) of n-dimensional numpy arrays of equal ndim.
+
+    Same result as `pa.array([a.tolist() for a in arrays])`, but built from the
+    flat numpy buffers instead of Python lists, which take about ten times the
+    memory of the arrays (e.g. 8 MB instead of 0.8 MB for a 3x256x256 image).
+    The shapes may differ between the arrays, e.g. point clouds of different sizes.
+    """
+    result = pa.array(np.concatenate([a.ravel() for a in arrays]), type=value_type)
+    shapes = np.array([a.shape for a in arrays], dtype=np.int64)
+    # From the innermost dimension outwards: array i has prod(shape[:d]) lists of length shape[d] at dimension d.
+    for d in reversed(range(shapes.shape[1])):
+        counts = np.prod(shapes[:, :d], axis=1)
+        lengths = np.repeat(shapes[:, d], counts)
+        offsets = np.zeros(len(lengths) + 1, dtype=np.int64)
+        np.cumsum(lengths, out=offsets[1:])
+        if offsets[-1] > np.iinfo(np.int32).max:
+            raise ValueError(
+                "Too many values in one row group of the Parquet file, reduce the chunk_size of the ParquetWriter."
+            )
+        result = pa.ListArray.from_arrays(pa.array(offsets.astype(np.int32)), result)
+    return result
 
 
 def _column_name(column) -> str:
@@ -38,15 +66,17 @@ class ParquetWriter:
     """Write a stream of transformed records to a Parquet file.
 
     Records are written in row-group batches as they arrive, so the whole
-    dataset never needs to be held in memory at once.
+    dataset never needs to be held in memory at once. If the pipeline fails
+    with an exception, the file is closed with the records written so far.
 
     Args:
         output_path (str): Destination path for the Parquet file.
-        chunk_size (int | None): Number of records per row group. Defaults to
-            writing every record in a single row group.
+        chunk_size (int | None): Number of records per row group (default: 256).
+            `None` writes every record in a single row group, holding all of
+            them in memory.
     """
 
-    def __init__(self, output_path: str, chunk_size: int | None = None):
+    def __init__(self, output_path: str, chunk_size: int | None = 256):
         self.output_path = output_path
         self.chunk_size = chunk_size
 
