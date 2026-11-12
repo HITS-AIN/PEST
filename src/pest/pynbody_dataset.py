@@ -219,7 +219,8 @@ class PynbodyDataset:
 
         Positions are in kpc relative to the subhalo center, which is taken from
         the catalogue (wrapped at the periodic box boundary), or computed with
-        `pynbody.analysis.center` if the catalogue has none. For IllustrisTNG-like
+        `pynbody.analysis.center` on the whole subhalo if the catalogue has
+        none, as for `particles()`, so all components share it. For IllustrisTNG-like
         snapshots, only the arrays needed for rendering ("pos", "mass", "aform",
         "metals") are read (see `_read_particles()`). Wind particles, which TNG
         stores with the stars, are kept as pynbody keeps them: they have no age
@@ -252,15 +253,15 @@ class PynbodyDataset:
         arrays = list(dict.fromkeys([*arrays, "vel"] if velocities else arrays))
         particles = self._read_particles(subhalo_id, pynbody.family.get_family(family_name), arrays)
         if particles is None:
-            particles = getattr(self.halo(subhalo_id), family_name)
+            halo = self.halo(subhalo_id)
+            if self.center_properties is None:
+                # The center of the whole subhalo, as in `particles()`, so that all components share it.
+                pynbody.analysis.center(halo)
+            particles = getattr(halo, family_name)
         if self.center_properties is not None:
             particles["pos"] = self._relative_to_center(particles["pos"], "pos", subhalo_id)
             if velocities:
                 particles["vel"] = self._relative_to_center(particles["vel"], "vel", subhalo_id)
-        elif len(particles):
-            pynbody.analysis.center(
-                particles, with_velocity=velocities, cen_num_particles=None if velocities else 0, move_all=False
-            )
         return particles
 
     def _read_particles(self, subhalo_id: int, family, names: list[str]):

@@ -9,6 +9,7 @@ import pytest
 import pest.pynbody_dataset
 from pest import FilterRange, LoadParticles, Pipeline, PynbodyDataset, RenderGas, RenderStars
 from pest.pynbody_dataset import simulation_name
+from pest.render_particles import half_mass_radius, parse_width
 
 # 5 subhalos: stellar masses [Msun] and flags
 STELLAR_MASS = np.array([1e8, 5e9, 2e10, 3e10, 1e12])
@@ -393,16 +394,21 @@ def test_render_gas_reads_quantity_and_weight(fake_pynbody, fake_render, monkeyp
     gas = dataset.gas
     monkeypatch.setattr(dataset, "gas", lambda *args, **kwargs: requested.append(kwargs) or gas(*args, **kwargs))
     step = RenderGas(
-        resolution=4, qty="temp", units=None, render_args={"weight": "rho"}, orientation="faceon", min_particles=1
+        resolution=4,
+        qty="temp",
+        units=None,
+        render_args={"weight": "rho"},
+        orientation="faceon",
+        orientation_by="gas",
+        min_particles=1,
     )
     step.bind(dataset)
-    monkeypatch.setattr(pynbody.analysis, "faceon", lambda halo, **kw: fake_render.append(("faceon", halo, kw)))
 
     step({"subhalo_id": 3})
+    # Oriented by the gas, whose velocities are loaded with it.
     assert requested == [{"velocities": True, "arrays": ["temp", "rho"]}]
-    assert [call[0] for call in fake_render] == ["center", "faceon", "image"]
-    assert fake_render[1][2] == {"disk_size": "5 kpc", "already_centered": True, "move_all": False}
-    assert fake_render[2][2]["units"] is None
+    assert [call[0] for call in fake_render] == ["image"]
+    assert fake_render[0][2]["units"] is None
 
 
 @pytest.mark.parametrize("render", [RenderStars, RenderGas])
@@ -490,7 +496,7 @@ def test_pipeline_drops_failed_image(fake_pynbody, fake_render, monkeypatch, tmp
 
 
 @pytest.mark.parametrize("render", [RenderStars, RenderGas])
-@pytest.mark.parametrize("kwargs", [{"center_mode": "pot"}, {"orientation": "edgeon"}])
+@pytest.mark.parametrize("kwargs", [{"center_mode": "pot"}, {"orientation": "edgeon"}, {"orientation_by": "dm"}])
 def test_render_rejects_unsupported(render, kwargs):
     with pytest.raises(ValueError):
         render(**kwargs)
@@ -539,6 +545,156 @@ def test_render_gas_empty_image(fake_pynbody, monkeypatch):
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # dropped without a warning
         assert step({"subhalo_id": 3}) is None
+
+
+@pytest.mark.parametrize(
+    "width, expected",
+    [
+        (50, (50, None)),
+        ("50 kpc", ("50 kpc", None)),
+        ("10 stars_half_mass_radius", (10.0, "stars")),
+        (" 2.5  gas_half_mass_radius ", (2.5, "gas")),
+        ("gas_half_mass_radius", (1.0, "gas")),
+    ],
+)
+def test_parse_width(width, expected):
+    assert parse_width(width) == expected
+
+
+@pytest.mark.parametrize("mass, expected", [([1.0, 1.0, 1.0, 1.0], 2.0), ([1.0, 1.0, 3.0, 1.0], 1.0)])
+def test_half_mass_radius(mass, expected):
+    # At radii 3, 4, 1 and 2.
+    pos = np.array([[0.0, 0.0, 3.0], [4.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+    assert half_mass_radius(pos, np.array(mass)) == expected
+
+
+@pytest.mark.parametrize("render, kind", [(RenderStars, "render"), (RenderGas, "image")])
+@pytest.mark.parametrize(
+    "width, expected",
+    # Subhalo 3 has 4 stars at (1, 1, 1) and 4 gas particles at (2, 2, 2) around the catalogue center.
+    [("2 stars_half_mass_radius", 2 * np.sqrt(3)), ("gas_half_mass_radius", np.sqrt(12)), ("30 kpc", "30 kpc")],
+)
+def test_render_width(fake_pynbody, fake_render, render, kind, width, expected):
+    step = render(width=width, resolution=4, min_particles=1)
+    step.bind(PynbodyDataset("snap_099"))
+
+    # The same width for every subhalo with the same particles, not a factor that compounds.
+    for _ in range(2):
+        assert step({"subhalo_id": 3}) is not None
+    assert [call[0] for call in fake_render] == [kind, kind]
+    for _, _, kwargs in fake_render:
+        if isinstance(expected, str):
+            assert kwargs["width"] == expected
+        else:
+            np.testing.assert_allclose(kwargs["width"], expected, rtol=1e-6)
+
+
+def test_render_star_and_gas_same_view(fake_pynbody, fake_render, monkeypatch):
+    def load_copy(subhalo_id):
+        halo = FakeHalo(subhalo_id)
+        # The stars rotate, the gas moves radially, so only the stars have an angular momentum.
+        halo.st["vel"][:, 0] += 1.0
+        return halo
+
+    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", load_copy)
+    dataset = PynbodyDataset("snap_099")
+    requested = []
+    load_gas = dataset.gas
+    monkeypatch.setattr(dataset, "gas", lambda *args, **kwargs: requested.append(kwargs) or load_gas(*args, **kwargs))
+    args = {"width": "4 stars_half_mass_radius", "resolution": 4, "orientation": "faceon", "min_particles": 1}
+    for step in (RenderStars(**args), RenderGas(**args)):
+        step.bind(dataset)
+        assert step({"subhalo_id": 3}) is not None
+    # Oriented by the stars, so the gas velocities are not needed.
+    assert requested == [{"velocities": False, "arrays": ["rho"]}]
+
+    (_, stars, star_kwargs), (_, gas, gas_kwargs) = fake_render
+    np.testing.assert_allclose(star_kwargs["width"], gas_kwargs["width"])
+    # Both rotated alike: the gas is still twice as far out as the stars, in the same, rotated, direction.
+    assert not np.allclose(stars["pos"], 1.0)
+    np.testing.assert_allclose(gas["pos"], 2 * stars["pos"], rtol=1e-6)
+    np.testing.assert_allclose(np.linalg.norm(stars["pos"], axis=1), np.sqrt(3), rtol=1e-6)
+
+    # The gas alone has no angular momentum to orient the galaxy by.
+    step = RenderGas(**args, orientation_by="gas")
+    step.bind(dataset)
+    assert step({"subhalo_id": 3}) is None
+
+
+@pytest.mark.parametrize(
+    "render, args",
+    [
+        (RenderGas, {"width": "stars_half_mass_radius"}),
+        (RenderGas, {"orientation": "faceon"}),
+        (RenderStars, {"width": "stars_half_mass_radius"}),
+        (RenderStars, {"orientation": "sideon"}),
+    ],
+)
+def test_render_without_reference_particles(fake_pynbody, fake_render, monkeypatch, render, args):
+    # The width or the orientation refer to the stars, which the subhalo does not have.
+    halo = FakeHalo(3)
+    halo.st = make_stars(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0))
+    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", lambda subhalo_id: halo)
+    step = render(resolution=4, min_particles=0, **args)
+    step.bind(PynbodyDataset("snap_099"))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # dropped without a warning
+        assert step({"subhalo_id": 3}) is None
+    assert fake_render == []
+
+
+class GasOnlyDataset:
+    def gas(self, subhalo_id, velocities=False, arrays=()):
+        raise AssertionError("not rendered")
+
+
+@pytest.mark.parametrize(
+    "args, needs_particles",
+    [
+        ({}, False),
+        ({"orientation_by": "stars"}, False),  # no orientation
+        ({"width": "gas_half_mass_radius", "orientation": "faceon", "orientation_by": "gas"}, False),
+        ({"orientation": "faceon"}, True),
+        ({"width": "stars_half_mass_radius"}, True),
+    ],
+)
+def test_render_bind_requires_particles_of_reference(args, needs_particles):
+    step = RenderGas(**args)
+    if needs_particles:
+        with pytest.raises(TypeError, match="does not provide the particles .* stars"):
+            step.bind(GasOnlyDataset())
+    else:
+        step.bind(GasOnlyDataset())
+
+
+def test_component_snapshot_shares_center_without_catalogue_center(fake_pynbody, monkeypatch):
+    # A catalogue without center properties, e.g. EAGLE or AHF.
+    properties = fake_pynbody.fake_halos.get_properties_all_halos()
+    for key in ("SubhaloPos", "SubhaloVel"):
+        del properties[key]
+    monkeypatch.setattr(fake_pynbody.fake_halos, "get_properties_all_halos", lambda: properties)
+
+    def load_copy(subhalo_id):
+        halo = pynbody.new(star=2, gas=3)
+        halo["pos"] = pynbody.array.SimArray(np.arange(15.0).reshape(5, 3), "kpc")
+        return halo
+
+    centered = []
+
+    def center(snapshot, **kwargs):
+        centered.append(len(snapshot))
+        snapshot["pos"] -= 1.0
+
+    monkeypatch.setattr(fake_pynbody.fake_halos, "load_copy", load_copy)
+    monkeypatch.setattr(pynbody.analysis, "center", center)
+    dataset = PynbodyDataset("snap_099")
+
+    stars = np.array(dataset.stars(3)["pos"])
+    gas = np.array(dataset.gas(3)["pos"])
+    # Centered on the whole subhalo each time, not on the stars or the gas alone.
+    assert centered == [5, 5]
+    np.testing.assert_allclose(np.concatenate([stars, gas]), np.arange(15.0).reshape(5, 3) - 1.0)
 
 
 # Synthetic TNG snapshot (in 2 files) and SUBFIND catalogue, generated by tests/make_illustris_tng_testdata.py
@@ -786,6 +942,28 @@ def test_tng_render_drops_failed_image(render):
 
     with pytest.warns(UserWarning, match="Subhalo 3 is dropped, .* ValueError: Number of smoothing particles"):
         assert step({"subhalo_id": 3}) is None
+
+
+@pytest.mark.filterwarnings("ignore")
+@pytest.mark.parametrize("direct_loading", [True, False])
+def test_tng_render_star_and_gas_same_view(direct_loading):
+    dataset = PynbodyDataset(TNG_SNAPSHOT)
+    dataset.direct_loading = direct_loading
+    args = {"width": "5 stars_half_mass_radius", "resolution": 16, "orientation": "faceon", "disk_size": "20 kpc"}
+    stars, gas = RenderStars(**args), RenderGas(**args)
+    for step in (stars, gas):
+        step.bind(dataset)
+    star_particles, gas_particles = stars._particles(0), gas._particles(0)
+
+    # Exactly the same width and rotation, whether the stars are rendered or only referred to.
+    reference = dataset.particles(0, "stars", ["pos", "mass"])
+    width = stars._width(0, star_particles)
+    assert width == gas._width(0, gas_particles) == 5 * half_mass_radius(reference["pos"], reference["mass"])
+    assert 0 < width < 100  # [kpc]
+    np.testing.assert_array_equal(stars._rotation(0, star_particles), gas._rotation(0, gas_particles))
+
+    assert stars({"subhalo_id": 0})["image"].shape == (3, 16, 16)
+    assert gas({"subhalo_id": 0})["gas_image"].shape == (1, 16, 16)
 
 
 @pytest.mark.filterwarnings("ignore")

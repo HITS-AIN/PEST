@@ -359,21 +359,25 @@ load:
 ### RenderStars options
 
 `RenderStars` renders the image with `pynbody.plot.stars.render` and adds it as a float32 array of
-shape `(3, height, width)`, channels first and rows from top to bottom. Before rendering, the
-center is refined on the star particles.
+shape `(3, height, width)`, channels first and rows from top to bottom. By default, the image is
+centered on the catalogue center, and with an `orientation`, the galaxy is rotated by the angular
+momentum of its stars. A `RenderGas` step with the same `width` therefore shows the subhalo in the
+same view (see {ref}`same view <usage-render-same-view>`).
 
 `RenderStars` is also a filter: a subhalo that cannot be rendered is dropped, and the summary of
 the run counts it as dropped by `RenderStars`. That is a subhalo with fewer than `min_particles`
-stars, one that cannot be oriented (see `orientation`), and one whose rendering fails, which is
-reported with a warning that names the subhalo and the error.
+stars, one without particles for the half-mass radius of `width`, one that cannot be oriented (see
+`orientation`), and one whose rendering fails, which is reported with a warning that names the
+subhalo and the error.
 
 | Argument | Description |
 |---|---|
-| `width` | Image width, as a float in kpc or a unit string, e.g. `50 kpc` (default 50) |
+| `width` | Image width, as a float in kpc, a unit string, e.g. `50 kpc`, or a multiple of the half-mass radius of the stars or the gas, e.g. `10 stars_half_mass_radius` or `5 gas_half_mass_radius` (default 50) |
 | `resolution` | Image size in pixels (default: pynbody's default) |
-| `center_mode` | pynbody centering scheme to refine the center on the stars: `ssc` (default), `com` or `hyb`. `catalogue` keeps the catalogue center |
-| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the star velocities as well. A galaxy whose stars within `disk_size` have no angular momentum, e.g. with no star that close to the center, cannot be oriented and is dropped |
-| `disk_size` | Radius around the center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
+| `center_mode` | `catalogue` (default) keeps the catalogue center. `ssc`, `com` or `hyb` refine it on the stars with that pynbody centering scheme, which then differs from the center of `RenderGas` |
+| `orientation` | Rotate the galaxy before rendering like `pynbody.analysis.faceon` or `sideon` (default: no rotation). A galaxy whose `orientation_by` particles within `disk_size` have no angular momentum, e.g. with no particle that close to the center, cannot be oriented and is dropped |
+| `orientation_by` | The particles whose angular momentum orients the galaxy: `stars` (default) or `gas`. Their velocities are loaded as well |
+| `disk_size` | Radius around the catalogue center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
 | `column` | Name of the added column (default `image`) |
 | `render_args` | Further arguments for `pynbody.plot.stars.render`, e.g. `{dynamic_range: 3.0}` or the bands `r_band`, `g_band` and `b_band` (default `I`, `V` and `U`). Dust (`with_dust`) is not supported, as pynbody computes it from the gas particles, which are not loaded |
 | `min_particles` | Drop subhalos with fewer star particles (default 32, the number of neighbours of pynbody's SPH smoothing, which fails with fewer) |
@@ -408,22 +412,24 @@ transform:
 ### RenderGas options
 
 `RenderGas` adds the image as a float32 array of shape `(1, height, width)`, channels first and rows
-from top to bottom, so the image transforms work on it as on star images. Before rendering, the
-center is refined on the gas particles, and `orientation` uses the angular momentum of the gas.
+from top to bottom, so the image transforms work on it as on star images. Its center, width and
+orientation work as for `RenderStars`: by default, it is centered on the catalogue center and
+oriented by the angular momentum of the stars, so that it has the same view as the star image.
 
 Like `RenderStars`, `RenderGas` is also a filter: a subhalo that cannot be rendered is dropped, and
 the summary of the run counts it as dropped by `RenderGas`. That is a subhalo with fewer than
-`min_particles` gas particles, one that cannot be oriented (see `orientation`), one without a
-positive pixel for `log`, and one whose rendering fails, which is reported with a warning that
-names the subhalo and the error.
+`min_particles` gas particles, one without particles for the half-mass radius of `width`, one that
+cannot be oriented (see `orientation`), one without a positive pixel for `log`, and one whose
+rendering fails, which is reported with a warning that names the subhalo and the error.
 
 | Argument | Description |
 |---|---|
-| `width` | Image width, as a float in kpc or a unit string, e.g. `50 kpc` (default 50) |
+| `width` | Image width, as a float in kpc, a unit string, e.g. `50 kpc`, or a multiple of the half-mass radius of the stars or the gas, e.g. `10 stars_half_mass_radius` or `5 gas_half_mass_radius` (default 50) |
 | `resolution` | Image size in pixels (default: pynbody's default) |
-| `center_mode` | pynbody centering scheme to refine the center on the gas: `ssc` (default), `com` or `hyb`. `catalogue` keeps the catalogue center |
-| `orientation` | Rotate the galaxy before rendering with `pynbody.analysis.faceon` or `sideon` (default: no rotation). Loads the gas velocities as well. A galaxy whose gas within `disk_size` has no angular momentum, e.g. with no gas that close to the center, cannot be oriented and is dropped |
-| `disk_size` | Radius around the center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
+| `center_mode` | `catalogue` (default) keeps the catalogue center. `ssc`, `com` or `hyb` refine it on the gas with that pynbody centering scheme, which then differs from the center of `RenderStars` |
+| `orientation` | Rotate the galaxy before rendering like `pynbody.analysis.faceon` or `sideon` (default: no rotation). A galaxy whose `orientation_by` particles within `disk_size` have no angular momentum, e.g. with no particle that close to the center, cannot be oriented and is dropped |
+| `orientation_by` | The particles whose angular momentum orients the galaxy: `stars` (default, as for `RenderStars`) or `gas`. Their velocities are loaded as well |
+| `disk_size` | Radius around the catalogue center that determines the angular momentum for `orientation`, as a float in kpc or a unit string (default `5 kpc`) |
 | `qty` | Gas array to render (default `rho`) |
 | `units` | Units of the image (default `Msol kpc**-2`). Units of `qty` integrated along the line of sight give a projected image; `null` keeps the units of `qty`, which gives a slice at z = 0 unless `render_args` sets a `weight` |
 | `log` | Store the log10 of the image, with pixels without gas set to the smallest positive value (default `true`). A subhalo without any positive pixel is dropped. Set it to `false` for linear values or quantities that can be negative |
@@ -437,6 +443,40 @@ For example, the density-weighted temperature along the line of sight is
 For IllustrisTNG-like snapshots, the positions, masses and densities (`Density`) of the gas are read
 {ref}`directly from the snapshot files <usage-tng-direct>`. Quantities that pynbody derives (e.g. `temp`)
 are rendered from the gas loaded with pynbody instead.
+
+(usage-render-same-view)=
+## Star and gas images of the same view
+
+`RenderStars` and `RenderGas` steps in one pipeline add a star and a gas image of each subhalo
+that can be stacked or compared pixel by pixel, as long as they have the same `width` and
+`resolution` and keep the defaults of `center_mode` and `orientation_by`:
+
+- Both are centered on the catalogue center (`center_mode: catalogue`). For catalogues without
+  a center, both use the center that pynbody computes for the whole subhalo.
+- Both are oriented by the angular momentum of the stars within `disk_size` (`orientation_by: stars`).
+- A width relative to a half-mass radius is the same for both, as both compute the radius from the
+  same particles around the catalogue center. The half-mass radius is the radius of the sphere
+  that holds half of the mass of the stars or the gas of the subhalo, as `SubhaloHalfmassRadType`
+  in SUBFIND catalogues.
+
+```yaml
+transform:
+  - class_path: pest.RenderStars
+    init_args:
+      column: star_image
+      width: 10 stars_half_mass_radius
+      resolution: 128
+      orientation: faceon
+  - class_path: pest.RenderGas
+    init_args:
+      column: gas_image
+      width: 10 stars_half_mass_radius
+      resolution: 128
+      orientation: faceon
+```
+
+A subhalo that only one of the steps can render is dropped by that step, so the records written
+have both images.
 
 (usage-download)=
 ## Downloading the Illustris/TNG SKIRT dataset

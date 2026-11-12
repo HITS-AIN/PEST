@@ -9,35 +9,52 @@ class RenderGas(RenderParticles):
 
     The pipeline binds the worker's dataset to this step, which must provide
     `gas(subhalo_id)` returning a snapshot of the gas particles of the subhalo,
-    centered on the subhalo (e.g. `PynbodyDataset`). The center is refined on
-    the gas with `pynbody.analysis.center`, and the image is rendered with
-    `pynbody.plot.image`, by default the projected gas surface density.
+    centered on the subhalo (e.g. `PynbodyDataset`), and
+    `particles(subhalo_id, component, fields)` if the width or the orientation
+    refer to the stars, as they do by default with an `orientation`. The image
+    is rendered with `pynbody.plot.image`, by default the projected gas
+    surface density.
+
+    With the defaults, the image has the same view as the one of `RenderStars`:
+    both are centered on the center of the dataset, and both are oriented by
+    the stars. A width relative to a half-mass radius, e.g.
+    "10 stars_half_mass_radius", is the same for both as well.
 
     The step returns the record with the image, or `None` for a subhalo that
     cannot be rendered, which the pipeline drops like a record rejected by a
-    filter: one with fewer than `min_particles` gas particles, one that cannot
-    be oriented (see `orientation`), one without a positive pixel for `log`,
-    and one whose rendering fails, which is reported with a warning.
+    filter: one with fewer than `min_particles` gas particles, one without
+    particles for the half-mass radius of `width`, one that cannot be oriented
+    (see `orientation`), one without a positive pixel for `log`, and one whose
+    rendering fails, which is reported with a warning.
 
     Args:
         width (float | str): Image width, as a float in the snapshot units
-            (kpc for `PynbodyDataset`) or a unit string, e.g. "50 kpc".
+            (kpc for `PynbodyDataset`), a unit string, e.g. "50 kpc", or a
+            multiple of the half-mass radius of the stars or the gas of the
+            subhalo, e.g. "10 stars_half_mass_radius" or
+            "5 gas_half_mass_radius". The half-mass radius is the radius around
+            the center of the dataset of the sphere that holds half of the mass
+            of these particles.
         resolution (int | None): Image size in pixels. If `None`, the pynbody
             default is used.
-        center_mode (str | None): pynbody centering scheme to refine the center
-            on the gas particles: "ssc", "com" or "hyb". If `None`, the pynbody
-            default ("ssc") is used. "catalogue" keeps the center of the
-            dataset, e.g. the most bound particle of SUBFIND catalogues.
-        orientation (str | None): Rotate the galaxy before rendering with
+        center_mode (str | None): "catalogue" (the default) keeps the center of
+            the dataset, e.g. the most bound particle of SUBFIND catalogues.
+            "ssc", "com" or "hyb" refine it on the gas particles with
+            `pynbody.analysis.center`, and `None` with the pynbody default
+            ("ssc"). A refined center differs from the one of `RenderStars`,
+            which refines it on the stars.
+        orientation (str | None): Rotate the galaxy before rendering like
             `pynbody.analysis.faceon` or `pynbody.analysis.sideon`, which orient
-            the angular momentum of the gas within `disk_size` along the line
-            of sight or perpendicular to it. If `None`, the image is not rotated.
-            The velocities of the gas are loaded for this. A galaxy whose gas
-            within `disk_size` has no angular momentum, e.g. with no gas that
-            close to the center, cannot be oriented and is dropped.
-        disk_size (float | str): Radius around the center that determines the
-            angular momentum for `orientation`, as a float in the snapshot units
-            or a unit string.
+            the angular momentum of the `orientation_by` particles within
+            `disk_size` along the line of sight or perpendicular to it. If
+            `None`, the image is not rotated. A galaxy whose `orientation_by`
+            particles within `disk_size` have no angular momentum, e.g. with no
+            particle that close to the center, cannot be oriented and is dropped.
+        orientation_by (str): The particles whose angular momentum orients the
+            galaxy, "stars" (the default, as for `RenderStars`) or "gas".
+        disk_size (float | str): Radius around the center of the dataset that
+            determines the angular momentum for `orientation`, as a float in
+            the snapshot units or a unit string.
         qty (str): Gas array to render, e.g. "rho" or "temp".
         units (str | None): Units of the image. Units of `qty` integrated along
             the line of sight give a projected image, e.g. the default
@@ -64,8 +81,9 @@ class RenderGas(RenderParticles):
         self,
         width: float | str = 50,
         resolution: int | None = None,
-        center_mode: str | None = None,
+        center_mode: str | None = "catalogue",
         orientation: str | None = None,
+        orientation_by: str = "stars",
         disk_size: float | str = "5 kpc",
         qty: str = "rho",
         units: str | None = "Msol kpc**-2",
@@ -74,7 +92,9 @@ class RenderGas(RenderParticles):
         render_args: dict | None = None,
         min_particles: int = 32,
     ):
-        super().__init__(width, resolution, center_mode, orientation, disk_size, column, render_args, min_particles)
+        super().__init__(
+            width, resolution, center_mode, orientation, orientation_by, disk_size, column, render_args, min_particles
+        )
         self.qty = qty
         self.units = units
         self.log = log
@@ -82,14 +102,15 @@ class RenderGas(RenderParticles):
         self.arrays = [name for name in (qty, self.render_args.get("weight")) if isinstance(name, str)]
 
     def _particles(self, subhalo_id):
-        return self.dataset.gas(subhalo_id, velocities=self.orientation is not None, arrays=self.arrays)
+        velocities = self.orientation is not None and self.orientation_by == self.component
+        return self.dataset.gas(subhalo_id, velocities=velocities, arrays=self.arrays)
 
-    def _image(self, gas) -> np.ndarray | None:
+    def _image(self, gas, width: float | str) -> np.ndarray | None:
         """The image of `gas`, or None if it has no positive pixel to take the log of."""
         image = pynbody.plot.image(
             gas,
             qty=self.qty,
-            width=self.width,
+            width=width,
             resolution=self.resolution,
             units=self.units,
             noplot=True,
