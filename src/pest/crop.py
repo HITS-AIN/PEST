@@ -15,7 +15,7 @@ class Crop:
     """
 
     def __init__(self, relative_size: float = 0.5):
-        self.relative_size = relative_size
+        self.relative_size = float(relative_size)
 
     def crop_(self, img, center, half_size):
         """Crop a square region around the center."""

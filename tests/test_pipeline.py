@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from pest import Pipeline
+from pest.pipeline import load_config
 
 
 def test_illustris_skirt_pipeline_1(tmp_path):
@@ -113,3 +114,25 @@ def test_pipeline_sets_pynbody_threads(tmp_path, monkeypatch):
     Pipeline(config).run()
 
     assert pynbody.config["number_of_threads"] == 3
+
+
+def test_load_config_reads_exponent_notation_as_float(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "a: 1.0e10\nb: 1e10\nc: 1e-3\nd: -2.5E+3\ne: .5e1\nf: 5\ng: '1e10'\nh: 50 kpc\ni: abc1e10\nj: 0.001\n"
+    )
+    config = load_config(path)
+    assert config == {
+        "a": 1e10,
+        "b": 1e10,
+        "c": 1e-3,
+        "d": -2.5e3,
+        "e": 5.0,
+        "f": 5,
+        "g": "1e10",
+        "h": "50 kpc",
+        "i": "abc1e10",
+        "j": 0.001,
+    }
+    assert all(isinstance(config[key], float) for key in "abcdej")
+    assert isinstance(config["f"], int)

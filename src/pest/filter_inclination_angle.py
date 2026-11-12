@@ -17,7 +17,7 @@ class FilterInclinationAngle:
     is_filter = True
 
     def __init__(self, max_inclination: float = 90.0):
-        self.max_inclination = max_inclination
+        self.max_inclination = float(max_inclination)
 
     def __call__(self, sample: dict) -> bool:
         image = np.array(sample["image"])

@@ -28,6 +28,12 @@ def test_index():
     assert not f({"x": table["x"][1]})
 
 
+def test_string_limits():
+    f = FilterRange("x", min="2.0", max="3e0")
+    assert (f.min, f.max) == (2.0, 3.0)
+    assert list(f.mask({"x": VALUES})) == [False, True, True, False]
+
+
 @pytest.mark.parametrize("units, expected", [("Msol", [False, True, False, False]), (None, [False] * 4)])
 def test_units(units, expected):
     table = {"m": pynbody.array.SimArray(VALUES, "1e10 Msol")}

@@ -33,8 +33,9 @@ class FilterRange:
         inclusive: bool = True,
     ):
         self.column = column
-        self.min = min
-        self.max = max
+        # Convert explicitly: config files may deliver numbers as strings, e.g. "1.0e10".
+        self.min = float(min)
+        self.max = float(max)
         self.index = index
         self.units = units
         self.inclusive = inclusive

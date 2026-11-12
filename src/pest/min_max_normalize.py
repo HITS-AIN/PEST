@@ -11,8 +11,8 @@ class MinMaxNormalize:
     def __init__(self, feature_range: list[float] | None = None):
         if feature_range is None:
             feature_range = [0, 1]
-        self.min_val = feature_range[0]
-        self.max_val = feature_range[1]
+        self.min_val = float(feature_range[0])
+        self.max_val = float(feature_range[1])
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
         img_min = image.min()

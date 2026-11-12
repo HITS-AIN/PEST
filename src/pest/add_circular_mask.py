@@ -14,7 +14,7 @@ class AddCircularMask:
     """
 
     def __init__(self, radius_fraction: float = 1.0):
-        self.radius_fraction = radius_fraction
+        self.radius_fraction = float(radius_fraction)
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
         # image shape: (C, H, W)

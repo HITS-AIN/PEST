@@ -3,6 +3,7 @@ import importlib
 import importlib.metadata
 import multiprocessing
 import os
+import re
 import subprocess
 import time
 
@@ -44,6 +45,27 @@ def print_header() -> None:
     print("=" * width)
     print(f"  {title}")
     print("=" * width)
+
+
+class _ConfigLoader(yaml.SafeLoader):
+    """`SafeLoader` that also reads exponent notation without a dot or exponent sign as a float.
+
+    PyYAML follows YAML 1.1, which reads e.g. `1e10`, `1.0e10` or `1e-3` as strings and only
+    `1.0e+10` as a float. YAML 1.2 reads all of them as floats.
+    """
+
+
+_ConfigLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)[eE][-+]?[0-9]+$"),
+    list("-+.0123456789"),
+)
+
+
+def load_config(path: str) -> dict:
+    """Read a YAML pipeline config, with numbers in exponent notation as floats."""
+    with open(path) as fh:
+        return yaml.load(fh, Loader=_ConfigLoader)
 
 
 def _available_cpus() -> int:
@@ -326,8 +348,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"Config: {os.path.abspath(args.config)}")
-    with open(args.config) as fh:
-        config = yaml.safe_load(fh)
+    config = load_config(args.config)
 
     Pipeline(config).run()
 

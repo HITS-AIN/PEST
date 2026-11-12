@@ -17,7 +17,7 @@ class FilterTruncatedGalaxies:
     is_filter = True
 
     def __init__(self, threshold: float = 0.5):
-        self.threshold = threshold
+        self.threshold = float(threshold)
 
     def __call__(self, sample) -> bool:
         image = np.array(sample["image"] if isinstance(sample, dict) else sample)

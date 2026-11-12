@@ -24,11 +24,11 @@ class CreateNormalizedRGBColors:
             scalers = [0.7, 0.5, 1.3]
         if channel_combinations is None:
             channel_combinations = [[2, 3], [1, 0], [0]]
-        self.stretch = stretch
+        self.stretch = float(stretch)
         self.range = range
-        self.lower_limit = lower_limit
+        self.lower_limit = float(lower_limit)
         self.channel_combinations = channel_combinations
-        self.scalers = scalers
+        self.scalers = [float(scaler) for scaler in scalers]
 
     def __call__(self, images) -> np.ndarray:
         resulting_image = np.zeros(
